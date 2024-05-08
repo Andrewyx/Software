@@ -273,6 +273,7 @@ class RobotCommunication(object):
             self.sequence_number += 1
 
             if self.__should_send_packet() or self.should_send_stop:
+                # RTT HERE
                 self.send_primitive_set.send_proto(primitive_set)
                 self.should_send_stop = False
 
@@ -298,7 +299,7 @@ class RobotCommunication(object):
         self.receive_robot_status = tbots_cpp.RobotStatusProtoListener(
             self.multicast_channel + "%" + self.interface,
             ROBOT_STATUS_PORT,
-            lambda data: self.__forward_to_proto_unix_io(RobotStatus, data),
+            lambda data: self.__receive_robot_status(data),
             True,
         )
 
@@ -330,6 +331,11 @@ class RobotCommunication(object):
         self.run_primitive_set_thread.start()
 
         return self
+
+    # TODO: MAKE THIS PRINT THE STUFF
+    def __receive_robot_status(self, robot_status) -> None:
+        print(time.time() - robot_status.time_sent)
+        self.__forward_to_proto_unix_io(RobotStatus, robot_status)
 
     def __exit__(self, type, value, traceback) -> None:
         """Exit RobotCommunication context manager

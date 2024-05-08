@@ -29,6 +29,10 @@ TbotsProto::PrimitiveSet NetworkService::poll(TbotsProto::RobotStatus& robot_sta
     if (shouldSendNewRobotStatus(robot_status))
     {
         last_breakbeam_state_sent = robot_status.power_status().breakbeam_tripped();
+        /**
+         * TODO RTT robot status response, load times, ADD THE TIME.
+         * find the prim set with maching id, delete older items
+         */
         sender->sendProto(robot_status);
         network_ticks = (network_ticks + 1) % ROBOT_STATUS_BROADCAST_RATE_HZ;
     }
@@ -59,6 +63,9 @@ bool NetworkService::shouldSendNewRobotStatus(
 void NetworkService::primitiveSetCallback(TbotsProto::PrimitiveSet input)
 {
     std::scoped_lock<std::mutex> lock(primitive_set_mutex);
+
+    //TODO: THIS TRACKS THE RECIEVED, make sure it is in the lock. log the new set within a queue
+
     const uint64_t seq_num = input.sequence_number();
 
     primitive_tracker.send(seq_num);

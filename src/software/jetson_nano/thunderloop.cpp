@@ -188,7 +188,7 @@ Thunderloop::~Thunderloop() {}
 
                 ZoneNamedN(_tracy_network_poll, "Thunderloop: Poll NetworkService", true);
 
-                new_primitive_set = network_service_->poll(robot_status_);
+                new_primitive_set = network_service_->poll(robot_status_); //TODO THIS IS FOR RTT
             }
 
             thunderloop_status_.set_network_service_poll_time_ms(
