@@ -1,8 +1,4 @@
-#include <queue>
-#include <string>
-
 #include "software/jetson_nano/services/network/proto_cache.h"
-#include "software/logger/logger.h"
 
 class ProtoTracker: public ProtoCache
 {

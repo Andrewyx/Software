@@ -21,13 +21,18 @@ void ProtoCache::send(uint64_t seq_num)
     }
 
     recent_proto_seq_nums.push(seq_num);
-    // Pop sequence numbers of protos that are no longer recent
+
+    removeOutdatedProtos(seq_num);
+
+    last_valid = true;
+}
+
+void ProtoCache::removeOutdatedProtos(uint64_t seq_num)
+{
     while (seq_num - recent_proto_seq_nums.front() >= RECENT_PROTO_LOSS_PERIOD)
     {
         recent_proto_seq_nums.pop();
     }
-
-    last_valid = true;
 }
 
 bool ProtoCache::isLastValid()

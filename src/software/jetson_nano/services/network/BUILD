@@ -34,6 +34,15 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "proto_tracker_rtt",
+    srcs = ["proto_tracker_rtt.cpp"],
+    hdrs = ["proto_tracker_rtt.h"],
+    deps = [
+        ":proto_cache",
+    ],
+)
+
 cc_test(
     name = "proto_tracker_test",
     srcs = ["proto_tracker_test.cpp"],

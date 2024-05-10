@@ -26,6 +26,14 @@ public:
     bool isLastValid();
 
 protected:
+    // Methods
+    /**
+     * Removes sequence numbers of protos that are no longer relevant
+     *
+     * @param seq_num The sequence number of a given proto
+     */
+    virtual void removeOutdatedProtos(uint64_t seq_num);
+
     // Constants
     static constexpr uint8_t RECENT_PROTO_LOSS_PERIOD = 100;
 
