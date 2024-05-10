@@ -1,9 +1,10 @@
 #include <queue>
 #include <string>
 
+#include "software/jetson_nano/services/network/proto_cache.h"
 #include "software/logger/logger.h"
 
-class ProtoTracker
+class ProtoTracker: public ProtoCache
 {
    public:
     /**
@@ -18,12 +19,7 @@ class ProtoTracker
      *
      * @param seq_num The sequence number of the newly received proto
      */
-    void send(uint64_t seq_num);
-
-    /**
-     * @return a boolean indicating whether the last received proto was valid
-     */
-    bool isLastValid();
+    void send(uint64_t seq_num) override;
 
     /**
      * @return a float equal to the proto loss rate
@@ -39,15 +35,6 @@ class ProtoTracker
      */
     float calculate_proto_loss_rate(uint64_t seq_num);
 
-    // Constants
-    static constexpr uint8_t RECENT_PROTO_LOSS_PERIOD = 100;
-
     // Variables
-    std::string proto_type;
-    bool last_valid       = false;
     float proto_loss_rate = 0;
-
-    // Queue of the sequence numbers of received protos in the past
-    // RECENT_PROTO_LOSS_PERIOD protos
-    std::queue<uint64_t> recent_proto_seq_nums;
 };

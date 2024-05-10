@@ -273,7 +273,8 @@ class RobotCommunication(object):
             self.sequence_number += 1
 
             if self.__should_send_packet() or self.should_send_stop:
-                # RTT HERE
+                # TODO: RTT HERE
+                #   - I believe we don't have to perform any actions here since timestamp is already declared
                 self.send_primitive_set.send_proto(primitive_set)
                 self.should_send_stop = False
 
@@ -332,7 +333,10 @@ class RobotCommunication(object):
 
         return self
 
-    # TODO: MAKE THIS PRINT THE STUFF
+    # TODO: Functions that handles the returned robot status in Thunderscope
+    #   - Must retrieve the time_sent field of the proto,
+    #     this means taking the diff of the current time and the omit_thunderloop_processing_time_sent
+    #   - Must update the visualized widget component
     def __receive_robot_status(self, robot_status) -> None:
         print(time.time() - robot_status.time_sent)
         self.__forward_to_proto_unix_io(RobotStatus, robot_status)

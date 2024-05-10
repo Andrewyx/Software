@@ -30,8 +30,12 @@ TbotsProto::PrimitiveSet NetworkService::poll(TbotsProto::RobotStatus& robot_sta
     {
         last_breakbeam_state_sent = robot_status.power_status().breakbeam_tripped();
         /**
-         * TODO RTT robot status response, load times, ADD THE TIME.
-         * find the prim set with maching id, delete older items
+         * TODO: Send return RobotStatus msg to Thunderscope
+         *      1) Traverse queue containing all received primitive_sets
+         *      2) If the last_handled_primitive_set for current robot_status is stored in the queue:
+         *         - delete all earlier sets
+         *         - stop & calculate the processing counter
+         *         - store the new omit_thunderloop_processing_time_sent = time_sent + processing duration
          */
         sender->sendProto(robot_status);
         network_ticks = (network_ticks + 1) % ROBOT_STATUS_BROADCAST_RATE_HZ;
@@ -64,7 +68,9 @@ void NetworkService::primitiveSetCallback(TbotsProto::PrimitiveSet input)
 {
     std::scoped_lock<std::mutex> lock(primitive_set_mutex);
 
-    //TODO: THIS TRACKS THE RECIEVED, make sure it is in the lock. log the new set within a queue
+    /* TODO: THIS TRACKS THE RECEIVED PRIMITIVES
+     *  - make sure it is in the lock. log the new set within a queue
+     */
 
     const uint64_t seq_num = input.sequence_number();
 

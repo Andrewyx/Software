@@ -21,6 +21,15 @@ cc_library(
     srcs = ["proto_tracker.cpp"],
     hdrs = ["proto_tracker.h"],
     deps = [
+        "//software/jetson_nano/services/network:proto_cache",
+    ],
+)
+
+cc_library(
+    name = "proto_cache",
+    srcs = ["proto_cache.cpp"],
+    hdrs = ["proto_cache.h"],
+    deps = [
         "//software/logger",
     ],
 )
