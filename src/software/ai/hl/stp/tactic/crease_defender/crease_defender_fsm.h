@@ -86,6 +86,14 @@ struct CreaseDefenderFSM : public DefenderFSMBase
     void blockThreat(const Update& event,
                      boost::sml::back::process<MoveFSM::Update> processEvent);
 
+    /**
+     * Guard that checks if the ball has been unattended or is left stagnant.
+     *
+     * @param event CreaseDefenderFSM::Update event
+     * @return true if the ball has been left stagnant for a period of time
+     */
+    bool enemyAttackerNoBallProgress(const Update& event);
+
     auto operator()()
     {
         using namespace boost::sml;
@@ -96,16 +104,21 @@ struct CreaseDefenderFSM : public DefenderFSMBase
         DEFINE_SML_STATE(DribbleFSM)
         DEFINE_SML_GUARD(ballNearbyWithoutThreat)
         DEFINE_SML_SUB_FSM_UPDATE_ACTION(prepareGetPossession, DribbleFSM)
+        DEFINE_SML_GUARD(enemyAttackerNoBallProgress)
 
         return make_transition_table(
             // src_state + event [guard] / action = dest_state
             *MoveFSM_S + Update_E[ballNearbyWithoutThreat_G] / prepareGetPossession_A =
                 DribbleFSM_S,
+            MoveFSM_S + Update_E[enemyAttackerNoBallProgress_G] / prepareGetPossession_A =
+                    DribbleFSM_S,
             MoveFSM_S + Update_E / blockThreat_A, MoveFSM_S = X,
             DribbleFSM_S + Update_E[!ballNearbyWithoutThreat_G] / blockThreat_A =
                 MoveFSM_S,
             DribbleFSM_S + Update_E / prepareGetPossession_A,
             X + Update_E[ballNearbyWithoutThreat_G] / prepareGetPossession_A =
+                DribbleFSM_S,
+            X + Update_E[enemyAttackerNoBallProgress_G] / prepareGetPossession_A =
                 DribbleFSM_S,
             X + Update_E / blockThreat_A = MoveFSM_S);
     }
@@ -113,6 +126,9 @@ struct CreaseDefenderFSM : public DefenderFSMBase
    private:
     static constexpr double DETECT_THREAT_AHEAD_SHAPE_LENGTH_M = 1;
     static constexpr double DETECT_THREAT_AHEAD_SHAPE_RADIUS_M = 0.25;
+    static constexpr double BALL_IS_STAGNANT_TIME_S = 3.0;
+    static constexpr double STAGNANT_DISTANCE_THRESHOLD_M = 0.2;
+
     /**
      * Finds the intersection with the front or sides of the defense area with the given
      * ray
@@ -136,6 +152,10 @@ struct CreaseDefenderFSM : public DefenderFSMBase
      * @return true if any enemy robot is within the given zone, else false
      */
     static bool isAnyEnemyInZone(const Update& event, const Stadium& zone);
+
+
+    Point enemy_possession_ball_position;
+    double enemy_possession_epoch_time_s;
 
     TbotsProto::RobotNavigationObstacleConfig robot_navigation_obstacle_config;
     TbotsProto::CreaseDefenderConfig crease_defender_config;

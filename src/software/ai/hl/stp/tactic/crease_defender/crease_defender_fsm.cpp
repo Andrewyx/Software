@@ -214,3 +214,34 @@ void CreaseDefenderFSM::prepareGetPossession(
 {
     DefenderFSMBase::prepareGetPossession(event.common, processEvent);
 }
+
+bool CreaseDefenderFSM::enemyAttackerNoBallProgress(const Update& event)
+{
+    if (event.common.world_ptr->getTeamWithPossession() == TeamPossession::ENEMY_TEAM)
+    {
+    // Start timer
+    // Start region around ball
+    // this has to be an init function of some sort that runs only once upon possession aquisition
+        const auto clock_time = std::chrono::system_clock::now();
+        enemy_possession_epoch_time_s =
+                static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
+                clock_time.time_since_epoch())
+                .count()) *
+        SECONDS_PER_MICROSECOND;
+        enemy_possession_ball_position = event.common.world_ptr->ball().position();
+
+        double time_in_seconds =
+                static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
+                        clock_time.time_since_epoch())
+                        .count()) *
+                SECONDS_PER_MICROSECOND;
+
+        if (enemy_possession_epoch_time_s - time_in_seconds >= BALL_IS_STAGNANT_TIME_S
+            && distance(event.common.world_ptr->ball().position(), enemy_possession_ball_position)
+            <= STAGNANT_DISTANCE_THRESHOLD_M)
+        {
+            return true;
+        }
+    }
+    return false;
+}
