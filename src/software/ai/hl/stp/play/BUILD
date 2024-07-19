@@ -20,23 +20,6 @@ cc_library(
     alwayslink = True,
 )
 
-cc_library(
-    name = "kickoff_enemy_play",
-    srcs = ["kickoff_enemy_play.cpp"],
-    hdrs = ["kickoff_enemy_play.h"],
-    deps = [
-        ":play",
-        "//shared:constants",
-        "//software/ai/evaluation:enemy_threat",
-        "//software/ai/evaluation:possession",
-        "//software/ai/hl/stp/tactic/goalie:goalie_tactic",
-        "//software/ai/hl/stp/tactic/move:move_tactic",
-        "//software/ai/hl/stp/tactic/shadow_enemy:shadow_enemy_tactic",
-        "//software/logger",
-        "//software/util/generic_factory",
-    ],
-    alwayslink = True,
-)
 
 cc_library(
     name = "kickoff_friendly_play",
