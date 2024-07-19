@@ -248,36 +248,37 @@ void CreaseDefenderFSM::prepareGetPossession(
 
 bool CreaseDefenderFSM::enemyAttackerNoBallProgress(const Update& event)
 {
-    if (event.common.world_ptr->getTeamWithPossession() == TeamPossession::ENEMY_TEAM)
+    if (event.common.world_ptr->getTeamWithPossession() == TeamPossession::ENEMY
+            && event.control_params.ball_steal_mode == TbotsProto::BallStealMode::STEAL)
     {
-    // Start timer
-    // Start region around ball
-    // this has to be an init function of some sort that runs only once upon possession acquisition
-
         Point current_ball_position = event.common.world_ptr->ball().position();
-        if (distance(enemy_possession_ball_position, current_ball_position) >= STAGNANT_DISTANCE_THRESHOLD_M)
-        {
-            // Reset the ball stagnant base location when it moves out of its threshold radius
-            enemy_possession_ball_position = current_ball_position;
-        }
-
         const auto clock_time = std::chrono::system_clock::now();
-        enemy_possession_epoch_time_s =
-                static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
-                        clock_time.time_since_epoch())
-                        .count()) *
-                SECONDS_PER_MICROSECOND;
 
-        double time_in_seconds =
-                static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
-                        clock_time.time_since_epoch())
-                        .count()) *
-                SECONDS_PER_MICROSECOND;
-
-        if (enemy_possession_epoch_time_s - time_in_seconds >= BALL_IS_STAGNANT_TIME_S
-            && distance(event.common.world_ptr->ball().position(), enemy_possession_ball_position)
-            <= STAGNANT_DISTANCE_THRESHOLD_M)
+        if (distance(enemy_possession_ball_position, current_ball_position)
+            >= crease_defender_config.ball_stagnant_distance_threshold_m())
         {
+            // Reset the ball's possible stagnant location when it moves out of its threshold radius
+            // and reset the initial time for a possible stagnant ball
+            enemy_possession_ball_position = current_ball_position;
+            enemy_possession_epoch_time_s =
+                    static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
+                            clock_time.time_since_epoch())
+                            .count()) *
+                    SECONDS_PER_MICROSECOND;
+        }
+        double epoch_time_in_seconds =
+                static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
+                        clock_time.time_since_epoch())
+                        .count()) *
+                SECONDS_PER_MICROSECOND;
+
+        double ball_displacement_m =
+                distance(event.common.world_ptr->ball().position(), enemy_possession_ball_position);
+        if (enemy_possession_epoch_time_s - epoch_time_in_seconds
+                >= crease_defender_config.ball_stagnant_time_threshold_s()
+                && ball_displacement_m <= crease_defender_config.ball_stagnant_distance_threshold_m())
+        {
+            // Ball is defined as "stagnant" due to no progress
             return true;
         }
     }

@@ -106,11 +106,16 @@ struct CreaseDefenderFSM : public DefenderFSMBase
 
         return make_transition_table(
             // src_state + event [guard] / action = dest_state
+
+            // Chase the ball when it is unattended
             *MoveFSM_S + Update_E[ballNearbyWithoutThreat_G] / prepareGetPossession_A =
                 DribbleSkillFSM_S,
+            // Chase/Steal the ball when it is stagnant
             MoveFSM_S + Update_E[enemyAttackerNoBallProgress_G] / prepareGetPossession_A =
                     DribbleSkillFSM_S,
+            // Relocate near Defense Area as default
             MoveFSM_S + Update_E / blockThreat_A, MoveFSM_S = X,
+            // Defines Stealing/Chasing conditions
             DribbleSkillFSM_S + Update_E[!ballNearbyWithoutThreat_G] / blockThreat_A =
                 MoveFSM_S,
             DribbleSkillFSM_S + Update_E / prepareGetPossession_A,
@@ -118,15 +123,13 @@ struct CreaseDefenderFSM : public DefenderFSMBase
                 DribbleSkillFSM_S,
             X + Update_E[enemyAttackerNoBallProgress_G] / prepareGetPossession_A =
                     DribbleSkillFSM_S,
+            // Default to blocking threat along defense area
             X + Update_E / blockThreat_A = MoveFSM_S);
     }
 
    private:
     static constexpr double DETECT_THREAT_AHEAD_SHAPE_LENGTH_M = 1;
     static constexpr double DETECT_THREAT_AHEAD_SHAPE_RADIUS_M = 0.25;
-
-    static constexpr double BALL_IS_STAGNANT_TIME_S = 3.0;
-    static constexpr double STAGNANT_DISTANCE_THRESHOLD_M = 0.2;
 
     /**
      * Finds the intersection with the front or sides of the defense area with the given
