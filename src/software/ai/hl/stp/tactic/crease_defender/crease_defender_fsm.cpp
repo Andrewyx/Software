@@ -248,7 +248,7 @@ void CreaseDefenderFSM::prepareGetPossession(
 
 bool CreaseDefenderFSM::enemyAttackerNoBallProgress(const Update& event)
 {
-    if (event.common.world_ptr->getTeamWithPossession() == TeamPossession::ENEMY
+    if (event.common.world_ptr->getTeamWithPossession() != TeamPossession::FRIENDLY
             && event.control_params.ball_steal_mode == TbotsProto::BallStealMode::STEAL)
     {
         Point current_ball_position = event.common.world_ptr->ball().position();
