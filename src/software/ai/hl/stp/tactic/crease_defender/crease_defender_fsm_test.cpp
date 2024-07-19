@@ -6,6 +6,8 @@
 #include "software/test_util/equal_within_tolerance.h"
 #include "software/test_util/test_util.h"
 
+const double DEFAULT_X_ALIGNMENT = 0.09;
+
 TEST(CreaseDefenderFSMTest, test_find_block_threat_point_in_front_of_crease)
 {
     TbotsProto::RobotNavigationObstacleConfig config;
@@ -14,19 +16,19 @@ TEST(CreaseDefenderFSMTest, test_find_block_threat_point_in_front_of_crease)
     Point enemy_threat_origin              = Point(2, 3);
     auto threat_point_centre               = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::CENTRE,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     ASSERT_TRUE(threat_point_centre);
     EXPECT_GT(threat_point_centre.value().x(), field.friendlyDefenseArea().xMax());
 
     auto threat_point_left = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::LEFT,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     ASSERT_TRUE(threat_point_left);
     EXPECT_GT(threat_point_left.value().x(), field.friendlyDefenseArea().xMax());
 
     auto threat_point_right = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::RIGHT,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     ASSERT_TRUE(threat_point_right);
     EXPECT_GT(threat_point_right.value().x(), field.friendlyDefenseArea().xMax());
 
@@ -42,21 +44,21 @@ TEST(CreaseDefenderFSMTest, test_find_block_threat_point_left_of_crease)
     Point enemy_threat_origin              = Point(-2.5, 3);
     auto threat_point_centre               = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::CENTRE,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     ASSERT_TRUE(threat_point_centre);
     EXPECT_GE(threat_point_centre.value().y(), field.friendlyDefenseArea().yMax());
     EXPECT_LE(threat_point_centre.value().x(), field.friendlyDefenseArea().xMax());
 
     auto threat_point_left = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::LEFT,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     ASSERT_TRUE(threat_point_left);
     EXPECT_GE(threat_point_left.value().y(), field.friendlyDefenseArea().yMax());
     EXPECT_LE(threat_point_left.value().x(), field.friendlyDefenseArea().xMax());
 
     auto threat_point_right = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::RIGHT,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     ASSERT_TRUE(threat_point_right);
     EXPECT_GE(threat_point_right.value().y(), field.friendlyDefenseArea().yMax());
     EXPECT_LE(threat_point_right.value().x(), field.friendlyDefenseArea().xMax());
@@ -70,24 +72,24 @@ TEST(CreaseDefenderFSMTest, test_find_block_threat_point_right_of_crease)
     TbotsProto::RobotNavigationObstacleConfig config;
     double robot_obstacle_inflation_factor = config.robot_obstacle_inflation_factor();
     Field field                            = Field::createSSLDivisionBField();
-    Point enemy_threat_origin              = Point(-4.25, -2);
+    Point enemy_threat_origin              = Point(-4.0, -2);
     auto threat_point_centre               = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::CENTRE,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     ASSERT_TRUE(threat_point_centre);
     EXPECT_LE(threat_point_centre.value().y(), field.friendlyDefenseArea().yMin());
     EXPECT_LE(threat_point_centre.value().x(), field.friendlyDefenseArea().xMax());
 
     auto threat_point_left = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::LEFT,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     ASSERT_TRUE(threat_point_left);
     EXPECT_LE(threat_point_left.value().y(), field.friendlyDefenseArea().yMin());
     EXPECT_LE(threat_point_left.value().x(), field.friendlyDefenseArea().xMax());
 
     auto threat_point_right = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::RIGHT,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     ASSERT_TRUE(threat_point_right);
     EXPECT_LE(threat_point_right.value().y(), field.friendlyDefenseArea().yMin());
     EXPECT_LE(threat_point_right.value().x(), field.friendlyDefenseArea().xMax());
@@ -104,28 +106,29 @@ TEST(CreaseDefenderFSMTest, test_find_block_threat_point_threat_in_crease)
     Point enemy_threat_origin              = Point(-4.25, 0);
     auto threat_point                      = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::CENTRE,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     EXPECT_FALSE(threat_point);
 
     threat_point = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::LEFT,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     EXPECT_FALSE(threat_point);
 
     threat_point = CreaseDefenderFSM::findBlockThreatPoint(
         field, enemy_threat_origin, TbotsProto::CreaseDefenderAlignment::RIGHT,
-        robot_obstacle_inflation_factor);
+        robot_obstacle_inflation_factor, DEFAULT_X_ALIGNMENT);
     EXPECT_FALSE(threat_point);
 }
 
 TEST(CreaseDefenderFSMTest, test_transitions)
 {
-    TbotsProto::AiConfig ai_config;
-    TbotsProto::RobotNavigationObstacleConfig config =
-        ai_config.robot_navigation_obstacle_config();
-    double robot_obstacle_inflation_factor = config.robot_obstacle_inflation_factor();
-    std::shared_ptr<World> world           = ::TestUtil::createBlankTestingWorld();
-    Robot robot                            = ::TestUtil::createRobotAtPos(Point(-2, -3));
+    std::shared_ptr<Strategy> strategy =
+        std::make_shared<Strategy>(TbotsProto::AiConfig());
+    double robot_obstacle_inflation_factor = strategy->getAiConfig()
+                                                 .robot_navigation_obstacle_config()
+                                                 .robot_obstacle_inflation_factor();
+    std::shared_ptr<World> world = ::TestUtil::createBlankTestingWorld();
+    Robot robot                  = ::TestUtil::createRobotAtPos(Point(-2, -3));
     ::TestUtil::setBallPosition(world, Point(-0.5, 0), Timestamp::fromSeconds(123));
     CreaseDefenderFSM::ControlParams control_params{
         .enemy_threat_origin       = Point(2, 3),
@@ -133,18 +136,18 @@ TEST(CreaseDefenderFSMTest, test_transitions)
         .max_allowed_speed_mode    = TbotsProto::MaxAllowedSpeedMode::PHYSICAL_LIMIT,
         .ball_steal_mode           = TbotsProto::BallStealMode::STEAL};
 
-    FSM<CreaseDefenderFSM> fsm(CreaseDefenderFSM{ai_config},
-                               DribbleFSM(ai_config.dribble_tactic_config()));
+    FSM<CreaseDefenderFSM> fsm(CreaseDefenderFSM{strategy}, DribbleSkillFSM());
     EXPECT_TRUE(fsm.is(boost::sml::state<MoveFSM>));
 
     // robot far from destination, ball in friendly half
     fsm.process_event(CreaseDefenderFSM::Update(
         control_params, TacticUpdate(robot, world, [](std::shared_ptr<Primitive>) {})));
-    EXPECT_TRUE(fsm.is(boost::sml::state<DribbleFSM>));
+    EXPECT_TRUE(fsm.is(boost::sml::state<DribbleSkillFSM>));
 
     auto block_point = CreaseDefenderFSM::findBlockThreatPoint(
         world->field(), control_params.enemy_threat_origin,
-        control_params.crease_defender_alignment, robot_obstacle_inflation_factor);
+        control_params.crease_defender_alignment, robot_obstacle_inflation_factor,
+        DEFAULT_X_ALIGNMENT);
 
     ASSERT_TRUE(block_point.has_value());
     robot.updateState(
@@ -156,11 +159,11 @@ TEST(CreaseDefenderFSMTest, test_transitions)
     // Set robot to the correct position to steal the ball
     fsm.process_event(CreaseDefenderFSM::Update(
         control_params, TacticUpdate(robot, world, [](std::shared_ptr<Primitive>) {})));
-    EXPECT_TRUE(fsm.is(boost::sml::state<DribbleFSM>));
+    EXPECT_TRUE(fsm.is(boost::sml::state<DribbleSkillFSM>));
     // Check that the FSM is stealing the ball
     fsm.process_event(CreaseDefenderFSM::Update(
         control_params, TacticUpdate(robot, world, [](std::shared_ptr<Primitive>) {})));
-    EXPECT_TRUE(fsm.is(boost::sml::state<DribbleFSM>));
+    EXPECT_TRUE(fsm.is(boost::sml::state<DribbleSkillFSM>));
 
     // Check FSM steals ball
     robot.updateState(
@@ -172,7 +175,7 @@ TEST(CreaseDefenderFSMTest, test_transitions)
         Timestamp::fromSeconds(123));
     fsm.process_event(CreaseDefenderFSM::Update(
         control_params, TacticUpdate(robot, world, [](std::shared_ptr<Primitive>) {})));
-    EXPECT_TRUE(fsm.is(boost::sml::state<DribbleFSM>));
+    EXPECT_TRUE(fsm.is(boost::sml::state<DribbleSkillFSM>));
 
     std::vector<Point> enemy_robots = {
         Point(0, 0),

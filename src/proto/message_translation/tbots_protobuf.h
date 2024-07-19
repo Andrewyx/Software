@@ -5,6 +5,7 @@
 #include "proto/vision.pb.h"
 #include "proto/visualization.pb.h"
 #include "proto/world.pb.h"
+#include "software/ai/evaluation/shot.h"
 #include "software/ai/navigator/trajectory/bang_bang_trajectory_1d_angular.h"
 #include "software/ai/navigator/trajectory/trajectory_path.h"
 #include "software/ai/passing/pass_with_rating.h"
@@ -214,6 +215,21 @@ std::unique_ptr<TbotsProto::PassVisualization> createPassVisualization(
     const std::vector<PassWithRating>& passes_with_rating);
 
 /**
+ * Returns an attacker visualization
+ *
+ * @param pass An optional pass to visualize
+ * @param pass_committed Whether we are committed to taking the pass
+ * @param shot An optional shot to visualize
+ * @param ball_position The current position of the ball used to visualize the shot
+ * @param chip_target An optional target that we are chipping to
+ *
+ * @return The unique_ptr to an AttackerVisualization proto
+ */
+std::unique_ptr<TbotsProto::AttackerVisualization> createAttackerVisualization(
+    const std::optional<Pass>& pass, bool pass_committed, const std::optional<Shot>& shot,
+    const std::optional<Point>& ball_position, const std::optional<Point>& chip_target);
+
+/**
  * Returns the WorldStateReceivedTrigger given the world state received trigger
  *
  * @return The unique_ptr to a TbotsProto::WorldStateReceivedTrigger proto containing
@@ -234,6 +250,10 @@ std::unique_ptr<TbotsProto::WorldStateReceivedTrigger> createWorldStateReceivedT
 std::unique_ptr<TbotsProto::CostVisualization> createCostVisualization(
     const std::vector<double>& costs, int num_rows, int num_cols);
 
+std::optional<TrajectoryPath> createTrajectoryPathFromParams(
+        const TbotsProto::TrajectoryPathParams2D& params, const Point& start_position, const Vector& initial_velocity,
+        const RobotConstants& robot_constants, const TbotsProto::MaxAllowedSpeedMode max_speed_mode);
+
 /**
  * Generate a 2D Trajectory Path given 2D trajectory parameters
  *
@@ -245,7 +265,7 @@ std::unique_ptr<TbotsProto::CostVisualization> createCostVisualization(
  */
 std::optional<TrajectoryPath> createTrajectoryPathFromParams(
     const TbotsProto::TrajectoryPathParams2D& params, const Vector& initial_velocity,
-    const RobotConstants& robot_constants);
+    const RobotConstants& robot_constants, TbotsProto::MaxAllowedSpeedMode max_speed_mode);
 
 /**
  * Generate an angular trajectory Path given angular trajectory proto parameters
@@ -257,7 +277,7 @@ std::optional<TrajectoryPath> createTrajectoryPathFromParams(
  */
 BangBangTrajectory1DAngular createAngularTrajectoryFromParams(
     const TbotsProto::TrajectoryParamsAngular1D& params,
-    const AngularVelocity& initial_velocity, const RobotConstants& robot_constants);
+    const AngularVelocity& initial_velocity, const RobotConstants& robot_constants, TbotsProto::MaxAllowedSpeedMode max_speed_mode);
 
 /**
  * Convert dribbler mode to dribbler speed
@@ -278,6 +298,18 @@ double convertDribblerModeToDribblerSpeed(TbotsProto::DribblerMode dribbler_mode
  *
  * @return the max allowed speed in m/s
  */
-double convertMaxAllowedSpeedModeToMaxAllowedSpeed(
+double convertMaxAllowedSpeedModeToMaxAllowedLinearSpeed(
     TbotsProto::MaxAllowedSpeedMode max_allowed_speed_mode,
     RobotConstants_t robot_constants);
+
+/**
+ * Convert max allowed speed mode to max allowed angular speed
+ *
+ * @param max_allowed_speed_mode The MaxAllowedSpeedMode
+ * @param robot_constants The robot constants
+ *
+ * @return the max allowed angular speed in m/s
+ */
+double convertMaxAllowedSpeedModeToMaxAllowedAngularSpeed(
+        TbotsProto::MaxAllowedSpeedMode max_allowed_speed_mode,
+        RobotConstants_t robot_constants);

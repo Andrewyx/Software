@@ -2,8 +2,8 @@
 
 #include "proto/parameters.pb.h"
 #include "proto/tactic.pb.h"
+#include "software/ai/hl/stp/skill/dribble/dribble_skill_fsm.h"
 #include "software/ai/hl/stp/tactic/defender/defender_fsm_base.h"
-#include "software/ai/hl/stp/tactic/dribble/dribble_fsm.h"
 #include "software/ai/hl/stp/tactic/move/move_fsm.h"
 #include "software/ai/hl/stp/tactic/tactic.h"
 #include "software/ai/hl/stp/tactic/transition_conditions.h"
@@ -40,24 +40,21 @@ struct CreaseDefenderFSM : public DefenderFSMBase
      * @param enemy_threat_origin The origin of the threat to defend against
      * @param crease_defender_alignment alignment of the crease defender
      * @param robot_obstacle_inflation_factor The robot obstacle inflation factor
+     * @param x_shift_meters The amount of robot radius' to shift in x direction
      *
      * @return The best point to block the threat if it exists
      */
     static std::optional<Point> findBlockThreatPoint(
         const Field& field, const Point& enemy_threat_origin,
         const TbotsProto::CreaseDefenderAlignment& crease_defender_alignment,
-        double robot_obstacle_inflation_factor);
+        double robot_obstacle_inflation_factor, double x_shift_meters);
 
     /**
      * Constructor for CreaseDefenderFSM struct
      *
-     * @param ai_config The ai config for this struct
+     * @param strategy the Strategy shared by all of AI
      */
-    explicit CreaseDefenderFSM(const TbotsProto::AiConfig& ai_config)
-        : robot_navigation_obstacle_config(ai_config.robot_navigation_obstacle_config()),
-          crease_defender_config(ai_config.crease_defender_config())
-    {
-    }
+    explicit CreaseDefenderFSM(std::shared_ptr<Strategy> strategy) : strategy(strategy) {}
 
     /**
      * Guard that checks if the ball is on friendly side, nearby, and unguarded by the
@@ -73,10 +70,11 @@ struct CreaseDefenderFSM : public DefenderFSMBase
     /**
      * This is the Action that prepares for getting possession of the ball
      * @param event CreaseDefenderFSM::Update event
-     * @param processEvent processes the DribbleFSM::Update
+     * @param processEvent processes the DribbleSkillFSM::Update
      */
-    void prepareGetPossession(const Update& event,
-                              boost::sml::back::process<DribbleFSM::Update> processEvent);
+    void prepareGetPossession(
+        const Update& event,
+        boost::sml::back::process<DribbleSkillFSM::Update> processEvent);
 
     /**
      * This is an Action that blocks the threat
@@ -101,31 +99,32 @@ struct CreaseDefenderFSM : public DefenderFSMBase
         DEFINE_SML_STATE(MoveFSM)
         DEFINE_SML_EVENT(Update)
         DEFINE_SML_SUB_FSM_UPDATE_ACTION(blockThreat, MoveFSM)
-        DEFINE_SML_STATE(DribbleFSM)
+        DEFINE_SML_STATE(DribbleSkillFSM)
         DEFINE_SML_GUARD(ballNearbyWithoutThreat)
-        DEFINE_SML_SUB_FSM_UPDATE_ACTION(prepareGetPossession, DribbleFSM)
+        DEFINE_SML_SUB_FSM_UPDATE_ACTION(prepareGetPossession, DribbleSkillFSM)
         DEFINE_SML_GUARD(enemyAttackerNoBallProgress)
 
         return make_transition_table(
             // src_state + event [guard] / action = dest_state
             *MoveFSM_S + Update_E[ballNearbyWithoutThreat_G] / prepareGetPossession_A =
-                DribbleFSM_S,
+                DribbleSkillFSM_S,
             MoveFSM_S + Update_E[enemyAttackerNoBallProgress_G] / prepareGetPossession_A =
-                    DribbleFSM_S,
+                    DribbleSkillFSM_S,
             MoveFSM_S + Update_E / blockThreat_A, MoveFSM_S = X,
-            DribbleFSM_S + Update_E[!ballNearbyWithoutThreat_G] / blockThreat_A =
+            DribbleSkillFSM_S + Update_E[!ballNearbyWithoutThreat_G] / blockThreat_A =
                 MoveFSM_S,
-            DribbleFSM_S + Update_E / prepareGetPossession_A,
+            DribbleSkillFSM_S + Update_E / prepareGetPossession_A,
             X + Update_E[ballNearbyWithoutThreat_G] / prepareGetPossession_A =
-                DribbleFSM_S,
+                DribbleSkillFSM_S,
             X + Update_E[enemyAttackerNoBallProgress_G] / prepareGetPossession_A =
-                DribbleFSM_S,
+                    DribbleSkillFSM_S,
             X + Update_E / blockThreat_A = MoveFSM_S);
     }
 
    private:
     static constexpr double DETECT_THREAT_AHEAD_SHAPE_LENGTH_M = 1;
     static constexpr double DETECT_THREAT_AHEAD_SHAPE_RADIUS_M = 0.25;
+
     static constexpr double BALL_IS_STAGNANT_TIME_S = 3.0;
     static constexpr double STAGNANT_DISTANCE_THRESHOLD_M = 0.2;
 
@@ -135,14 +134,14 @@ struct CreaseDefenderFSM : public DefenderFSMBase
      *
      * @param field The field that has the friendly defense area
      * @param ray The ray to intersect
-     * @param robot_obstacle_inflation_factor The robot obstacle inflation factor
+     * @param inflated_defense_area The inflated defense area
      *
      * @return the intersection with the front or sides of the defense area, returns
      * std::nullopt if there is no intersection or if the start point of the ray is inside
      * or behind the defense area
      */
     static std::optional<Point> findDefenseAreaIntersection(
-        const Field& field, const Ray& ray, double robot_obstacle_inflation_factor);
+        const Field& field, const Ray& ray, const Rectangle& inflated_defense_area);
 
     /**
      * Returns true if any enemy robot is within the given zone
@@ -153,6 +152,27 @@ struct CreaseDefenderFSM : public DefenderFSMBase
      */
     static bool isAnyEnemyInZone(const Update& event, const Stadium& zone);
 
+    std::shared_ptr<Strategy> strategy;
+
+    /**
+     * Return the Rectangle that forms the path around the crease that the defenders must
+     * follow. It's basically the crease inflated by one robot radius multiplied by a
+     * factor
+     *
+     * @param event CreaseDefenderFSM::Update event
+     * @param robot_obstacle_inflation_factor the inflation factor to build the inflated
+     * defense area
+     * @return inflated area
+     */
+    static inline Rectangle buildInflatedDefenseArea(
+        const Field& field, double robot_obstacle_inflation_factor)
+    {
+        double robot_radius_expansion_amount =
+            ROBOT_MAX_RADIUS_METERS * robot_obstacle_inflation_factor;
+        Rectangle inflated_defense_area =
+            field.friendlyDefenseArea().expand(robot_radius_expansion_amount);
+        return inflated_defense_area;
+    }
 
     Point enemy_possession_ball_position;
     double enemy_possession_epoch_time_s;

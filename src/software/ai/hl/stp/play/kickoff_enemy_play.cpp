@@ -9,7 +9,10 @@
 #include "software/geom/algorithms/calculate_block_cone.h"
 #include "software/util/generic_factory/generic_factory.h"
 
-KickoffEnemyPlay::KickoffEnemyPlay(TbotsProto::AiConfig config) : Play(config, true) {}
+KickoffEnemyPlay::KickoffEnemyPlay(std::shared_ptr<Strategy> strategy)
+    : Play(true, strategy)
+{
+}
 
 void KickoffEnemyPlay::getNextTactics(TacticCoroutine::push_type &yield,
                                       const WorldPtr &world_ptr)
@@ -49,10 +52,10 @@ void KickoffEnemyPlay::getNextTactics(TacticCoroutine::push_type &yield,
     std::vector<Point> defense_positions = {
         Point(world_ptr->field().friendlyGoalpostNeg().x() +
                   world_ptr->field().defenseAreaXLength() + 2 * ROBOT_MAX_RADIUS_METERS,
-              -world_ptr->field().defenseAreaYLength() / 2.0),
+              -world_ptr->field().defenseAreaYLength() / 2.0 + 0.5),
         Point(world_ptr->field().friendlyGoalpostPos().x() +
                   world_ptr->field().defenseAreaXLength() + 2 * ROBOT_MAX_RADIUS_METERS,
-              world_ptr->field().defenseAreaYLength() / 2.0),
+              world_ptr->field().defenseAreaYLength() / 2.0 - 0.5),
         Point(world_ptr->field().friendlyGoalCenter().x() +
                   world_ptr->field().defenseAreaXLength() + 2 * ROBOT_MAX_RADIUS_METERS,
               world_ptr->field().friendlyGoalCenter().y()),
@@ -91,9 +94,18 @@ void KickoffEnemyPlay::getNextTactics(TacticCoroutine::push_type &yield,
             LOG(WARNING) << "No Robot on the Field!";
         }
 
-        auto enemy_threats =
+        std::vector<EnemyThreat> all_enemy_threats =
             getAllEnemyThreats(world_ptr->field(), world_ptr->friendlyTeam(),
                                world_ptr->enemyTeam(), world_ptr->ball(), false);
+
+        // We can only shadow enemy threats on our side of the field        
+        std::vector<EnemyThreat> filtered_enemy_threats;
+        std::copy_if(all_enemy_threats.begin(), all_enemy_threats.end(),
+                     std::back_inserter(filtered_enemy_threats),
+                     [&](const EnemyThreat &enemy_threat) {
+                         return contains(world_ptr->field().friendlyHalf(),
+                                         enemy_threat.robot.position());
+                     });
 
         PriorityTacticVector result = {{}};
 
@@ -101,10 +113,10 @@ void KickoffEnemyPlay::getNextTactics(TacticCoroutine::push_type &yield,
         int defense_position_index = 0;
         for (unsigned i = 0; i < defense_positions.size() - 1; ++i)
         {
-            if (i < 2 && i < enemy_threats.size())
+            if (i < 2 && i < filtered_enemy_threats.size())
             {
                 // Assign the first 2 robots to shadow enemies, if the enemies exist
-                auto enemy_threat = enemy_threats.at(i);
+                auto enemy_threat = filtered_enemy_threats.at(i);
                 // Shadow with a distance slightly more than the distance from the enemy
                 // robot to the center line, so we are always just on our side of the
                 // center line
@@ -148,4 +160,5 @@ void KickoffEnemyPlay::getNextTactics(TacticCoroutine::push_type &yield,
 }
 
 // Register this play in the genericFactory
-static TGenericFactory<std::string, Play, KickoffEnemyPlay, TbotsProto::AiConfig> factory;
+static TGenericFactory<std::string, Play, KickoffEnemyPlay, std::shared_ptr<Strategy>>
+    factory;
