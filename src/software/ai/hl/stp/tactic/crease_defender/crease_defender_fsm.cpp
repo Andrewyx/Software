@@ -221,14 +221,21 @@ bool CreaseDefenderFSM::enemyAttackerNoBallProgress(const Update& event)
     {
     // Start timer
     // Start region around ball
-    // this has to be an init function of some sort that runs only once upon possession aquisition
+    // this has to be an init function of some sort that runs only once upon possession acquisition
+
+        Point current_ball_position = event.common.world_ptr->ball().position();
+        if (distance(enemy_possession_ball_position, current_ball_position) >= STAGNANT_DISTANCE_THRESHOLD_M)
+        {
+            // Reset the ball stagnant base location when it moves out of its threshold radius
+            enemy_possession_ball_position = current_ball_position;
+        }
+
         const auto clock_time = std::chrono::system_clock::now();
         enemy_possession_epoch_time_s =
                 static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
-                clock_time.time_since_epoch())
-                .count()) *
-        SECONDS_PER_MICROSECOND;
-        enemy_possession_ball_position = event.common.world_ptr->ball().position();
+                        clock_time.time_since_epoch())
+                        .count()) *
+                SECONDS_PER_MICROSECOND;
 
         double time_in_seconds =
                 static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(
