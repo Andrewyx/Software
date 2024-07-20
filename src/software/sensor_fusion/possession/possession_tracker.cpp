@@ -7,6 +7,8 @@
 PossessionTracker::PossessionTracker(const TbotsProto::PossessionTrackerConfig &config)
     : distance_near_tolerance_meters(config.distance_near_tolerance_meters()),
       distance_far_tolerance_meters(config.distance_far_tolerance_meters()),
+      stagnant_speed_threshold_m_per_s(config.stagnant_speed_threshold_m_per_s()),
+      stagnant_time_threshold_s(Duration::fromSeconds(config.stagnant_time_threshold_s())),
       time_near_threshold(Duration::fromSeconds(config.time_near_threshold_s())),
       time_far_threshold(Duration::fromSeconds(config.time_far_threshold_s())),
       last_timestamp(Timestamp::fromSeconds(0)),
@@ -51,6 +53,13 @@ TeamPossession PossessionTracker::getTeamWithPossession(const Team &friendly_tea
         possession = TeamPossession::LOOSE;
     }
 
+    if ((possession != TeamPossession::ENEMY) &&
+        (stagnant_ball_duration > stagnant_time_threshold_s))
+    {
+        // Loose if enemy fails to make progress ("stagnant ball")
+        possession = TeamPossession::LOOSE;
+    }
+
     return possession;
 }
 
@@ -70,6 +79,7 @@ void PossessionTracker::updateTimes(const Team &friendly_team, const Team &enemy
 
     double distance_friendly = distance(nearest_friendly->position(), ball.position());
     double distance_enemy    = distance(nearest_enemy->position(), ball.position());
+
 
     if (distance_friendly < distance_near_tolerance_meters)
     {
@@ -106,4 +116,14 @@ void PossessionTracker::updateTimes(const Team &friendly_team, const Team &enemy
     {
         time_far_enemy = Duration::fromSeconds(0);
     }
+
+    if (ball.velocity().length() < stagnant_speed_threshold_m_per_s)
+    {
+        stagnant_ball_duration = stagnant_time_threshold_s + delta_time;
+    }
+    else
+    {
+        stagnant_ball_duration = Duration::fromSeconds(0);
+    }
+
 }

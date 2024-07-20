@@ -42,6 +42,12 @@ class PossessionTracker
     // to be considered far away from the ball
     double distance_far_tolerance_meters;
 
+    // Max speed for the ball to be considered to be in a "stagnant" state
+    double stagnant_speed_threshold_m_per_s;
+
+    // Min time for the ball to be stagnant for the game state to be considered stagnant
+    Duration stagnant_time_threshold_s;
+
     // Min time that robot must stay close to ball for it to be considered near
     Duration time_near_threshold;
 
@@ -65,6 +71,9 @@ class PossessionTracker
 
     // The team currently with possession of the ball
     TeamPossession possession;
+
+    // The amount of time the ball has remained stagnant
+    Duration stagnant_ball_duration;
 
     /**
      * Updates the amounts of time that each team has spent near or away from the ball

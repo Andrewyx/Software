@@ -265,3 +265,32 @@ TEST_F(PlaySelectionFSMTest, test_transition_between_ball_placement_and_free_kic
     EXPECT_TRUE(fsm->is(boost::sml::state<PlaySelectionFSM::OffensePlayState>));
     EXPECT_EQ("OffensePlay", objectTypeName(*current_play));
 }
+
+//TEST_F(PlaySelectionFSMTest, test_transition_offence_on_stagnant_ball)
+//{
+//    std::shared_ptr<Play> current_play = std::make_shared<HaltPlay>(strategy);
+//
+//    // Start in halt
+//    fsm->process_event(PlaySelectionFSM::Update(
+//            [&current_play](std::shared_ptr<Play> play) { current_play = play; }, world_ptr));
+//    EXPECT_TRUE(fsm->is(boost::sml::state<PlaySelectionFSM::HaltState>));
+//    EXPECT_EQ("HaltPlay", objectTypeName(*current_play));
+//
+//    // Stop
+//    game_state.updateRefereeCommand(RefereeCommand::STOP);
+//    world_ptr->updateGameState(game_state);
+//    ;
+//    fsm->process_event(PlaySelectionFSM::Update(
+//            [&current_play](std::shared_ptr<Play> play) { current_play = play; }, world_ptr));
+//    EXPECT_TRUE(fsm->is(boost::sml::state<PlaySelectionFSM::StopState>));
+//    EXPECT_EQ("StopPlay", objectTypeName(*current_play));
+//
+//    // Friendly ball placement
+//    game_state.updateRefereeCommand(RefereeCommand::BALL_PLACEMENT_US);
+//    world_ptr->updateGameState(game_state);
+//    fsm->process_event(PlaySelectionFSM::Update(
+//            [&current_play](std::shared_ptr<Play> play) { current_play = play; }, world_ptr));
+//    EXPECT_TRUE(game_state.isOurBallPlacement());
+//    EXPECT_TRUE(fsm->is(boost::sml::state<PlaySelectionFSM::SetPlayState>));
+//    EXPECT_EQ("BallPlacementPlay", objectTypeName(*current_play));
+//}

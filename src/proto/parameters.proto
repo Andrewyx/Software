@@ -745,6 +745,12 @@ message PossessionTrackerConfig
         (bounds).min_double_value = 0.0,
         (bounds).max_double_value = 10.0
     ];
+    // determines the speed threshold for what is considered a "stagnant ball" in meters per second
+    required double stagnant_speed_threshold_m_per_s = 5
+        [default = 0.7, (bounds).min_double_value = 0.0, (bounds).max_double_value = 3.0];
+    // determines the duration threshold for what is considered a "stagnant state"
+    required double stagnant_time_threshold_s = 6
+        [default = 3.0, (bounds).min_double_value = 0.01, (bounds).max_double_value = 10.0];
 }
 
 message NetworkConfig

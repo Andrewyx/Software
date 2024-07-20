@@ -8,6 +8,8 @@ from software.simulated_tests.ball_enters_region import *
 from software.simulated_tests.simulated_test_fixture import simulated_test_runner
 from proto.message_translation.tbots_protobuf import create_world_state
 from proto.ssl_gc_common_pb2 import Team
+from software.simulated_tests.ball_enters_region import *
+
 
 
 @pytest.mark.parametrize(

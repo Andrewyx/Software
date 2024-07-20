@@ -102,3 +102,57 @@ TEST(PossessionTrackerTest, get_possession_with_ball_near_both_teams)
         world->friendlyTeam(), world->enemyTeam(), world->ball(), world->field());
     EXPECT_EQ(possession, TeamPossession::IN_CONTEST);
 }
+
+TEST(PossessionTrackerTest, get_possession_with_stagnant_ball)
+{
+    auto world = TestUtil::createBlankTestingWorld();
+
+    // Position all robots in the friendly half.
+    auto friendly_team = TestUtil::setRobotPositionsHelper(
+            world->friendlyTeam(), {Point(-0.45, 0)}, Timestamp::fromSeconds(0));
+    auto enemy_team = TestUtil::setRobotPositionsHelper(
+            world->enemyTeam(), {Point(-0.55, 0)}, Timestamp::fromSeconds(0));
+    world->updateFriendlyTeamState(friendly_team);
+    world->updateEnemyTeamState(enemy_team);
+
+    TbotsProto::PossessionTrackerConfig config;
+    PossessionTracker possession_tracker(config);
+    TeamPossession possession;
+
+    // Ball equally near both friendly and enemy bots for a period of time
+    // (i.e both teams have presence over the ball).
+    world->updateBall(Ball({-0.5, 0}, {0, 0}, Timestamp::fromSeconds(0)));
+    possession = possession_tracker.getTeamWithPossession(
+            world->friendlyTeam(), world->enemyTeam(), world->ball(), world->field());
+    world->updateBall(Ball({-0.5, 0}, {0, 0}, Timestamp::fromSeconds(1)));
+    possession = possession_tracker.getTeamWithPossession(
+            world->friendlyTeam(), world->enemyTeam(), world->ball(), world->field());
+    EXPECT_EQ(possession, TeamPossession::IN_CONTEST);
+//
+//    // Ball equally far away from both friendly and enemy bots
+//    // (i.e neither team has presence over the ball).
+//    world->updateBall(Ball({2, 0}, {0, 0}, Timestamp::fromSeconds(1)));
+//    possession = possession_tracker.getTeamWithPossession(
+//            world->friendlyTeam(), world->enemyTeam(), world->ball(), world->field());
+//    world->updateBall(Ball({2, 0}, {0, 0}, Timestamp::fromSeconds(3)));
+//    possession = possession_tracker.getTeamWithPossession(
+//            world->friendlyTeam(), world->enemyTeam(), world->ball(), world->field());
+//    EXPECT_EQ(possession, TeamPossession::LOOSE);
+//
+//    // Position all bots in the enemy half.
+//    friendly_team = TestUtil::setRobotPositionsHelper(
+//            world->friendlyTeam(), {Point(0.45, 0)}, Timestamp::fromSeconds(3));
+//    enemy_team = TestUtil::setRobotPositionsHelper(world->enemyTeam(), {Point(0.55, 0)},
+//                                                   Timestamp::fromSeconds(1));
+//    world->updateFriendlyTeamState(friendly_team);
+//    world->updateEnemyTeamState(enemy_team);
+//
+//    // Ball equally near both friendly and enemy bots for a period of time.
+//    world->updateBall(Ball({0.5, 0}, {0, 0}, Timestamp::fromSeconds(3)));
+//    possession = possession_tracker.getTeamWithPossession(
+//            world->friendlyTeam(), world->enemyTeam(), world->ball(), world->field());
+//    world->updateBall(Ball({0.5, 0}, {0, 0}, Timestamp::fromSeconds(4)));
+//    possession = possession_tracker.getTeamWithPossession(
+//            world->friendlyTeam(), world->enemyTeam(), world->ball(), world->field());
+//    EXPECT_EQ(possession, TeamPossession::IN_CONTEST);
+}
