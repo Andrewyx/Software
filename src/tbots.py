@@ -7,6 +7,8 @@ import itertools
 from subprocess import PIPE, run
 import argparse
 from thefuzz import process
+from rich import print
+from typer_shell import make_typer_shell
 
 # thefuzz is a fuzzy string matcher in python
 # https://github.com/seatgeek/thefuzz
