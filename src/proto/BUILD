@@ -5,11 +5,6 @@ load("//starlark/nanopb:nanopb.bzl", "nanopb_proto_library")
 package(default_visibility = ["//visibility:public"])
 
 proto_library(
-    name = "geneva_proto",
-    srcs = [":geneva_slot.proto"],
-)
-
-proto_library(
     name = "geometry_proto",
     srcs = [":geometry.proto"],
 )
@@ -23,7 +18,6 @@ proto_library(
         "tbots_timestamp_msg.proto",
     ],
     deps = [
-        ":geneva_proto",
         ":geometry_proto",
         "@nanopb//:nanopb_proto",
     ],
@@ -34,6 +28,7 @@ proto_library(
     srcs = [
         "ball.proto",
         "game_state.proto",
+        "geometry.proto",
         "ip_notification.proto",
         "parameters.proto",
         "play.proto",
@@ -48,7 +43,6 @@ proto_library(
         "world.proto",
     ],
     deps = [
-        ":geneva_proto",
         ":geometry_proto",
         ":robot_proto",
         "@nanopb//:nanopb_proto",
@@ -64,8 +58,8 @@ cc_proto_library(
 nanopb_proto_library(
     name = "tbots_nanopb_proto",
     nanopb_libs = ["@nanopb//:nanopb"],
-    deps = [":tbots_proto"],
     options = glob(["*.options"]),
+    #    deps = [":tbots_proto"],
 )
 
 py_proto_library(
