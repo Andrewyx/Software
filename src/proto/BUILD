@@ -28,7 +28,6 @@ proto_library(
     srcs = [
         "ball.proto",
         "game_state.proto",
-        "geometry.proto",
         "ip_notification.proto",
         "parameters.proto",
         "play.proto",
@@ -59,7 +58,7 @@ nanopb_proto_library(
     name = "tbots_nanopb_proto",
     nanopb_libs = ["@nanopb//:nanopb"],
     options = glob(["*.options"]),
-    #    deps = [":tbots_proto"],
+    deps = [":tbots_proto"],
 )
 
 py_proto_library(
