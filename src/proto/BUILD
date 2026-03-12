@@ -1,6 +1,7 @@
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
 load("@protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("//starlark/nanopb:nanopb.bzl", "nanopb_proto_library")
+load("//proto:pyi_proto_library.bzl", "pyi_proto_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -250,8 +251,40 @@ py_library(
     srcs = [
         "import_all_protos.py",
     ],
+    data = [
+        ":software_pyi_proto",
+        ":tbots_pyi_proto",
+        ":estop_state_pyi_proto",
+        ":visualization_pyi_proto",
+        ":validation_pyi_proto",
+    ],
     deps = [
         ":software_py_proto",
         ":tbots_py_proto",
     ],
+)
+
+pyi_proto_library(
+    name = "tbots_pyi_proto",
+    deps = [":tbots_proto"],
+)
+
+pyi_proto_library(
+    name = "estop_state_pyi_proto",
+    deps = [":estop_state_proto"],
+)
+
+pyi_proto_library(
+    name = "software_pyi_proto",
+    deps = [":software_proto"],
+)
+
+pyi_proto_library(
+    name = "visualization_pyi_proto",
+    deps = [":visualization_proto"],
+)
+
+pyi_proto_library(
+    name = "validation_pyi_proto",
+    deps = [":validation_proto"],
 )

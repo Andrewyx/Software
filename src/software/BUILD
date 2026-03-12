@@ -121,6 +121,30 @@ pybind_extension(
     ],
 )
 
+py_binary(
+    name = "generate_stubs",
+    srcs = ["generate_stubs.py"],
+    deps = [
+        requirement("pybind11-stubgen"),
+    ],
+)
+
+genrule(
+    name = "py_constants_stub",
+    srcs = [":py_constants.so"],
+    outs = ["py_constants.pyi"],
+    tools = [":generate_stubs"],
+    cmd = "STUB_PYTHONPATH=$$(dirname $$(dirname $(location :py_constants.so))) $(location :generate_stubs) --ignore-all-errors -o $(@D) software.py_constants && mv $(@D)/software/py_constants.pyi $(@)",
+)
+
+genrule(
+    name = "python_bindings_stub",
+    srcs = [":python_bindings.so", ":py_constants.so"],
+    outs = ["python_bindings.pyi"],
+    tools = [":generate_stubs"],
+    cmd = "STUB_PYTHONPATH=$$(dirname $$(dirname $(location :python_bindings.so))) $(location :generate_stubs) --ignore-all-errors -o $(@D) software.python_bindings && mv $(@D)/software/python_bindings.pyi $(@)",
+)
+
 py_library(
     name = "conftest",
     srcs = ["conftest.py"],

@@ -64,6 +64,14 @@ pip.parse(
 )
 use_repo(pip, "robot_diagnostics_cli_deps")
 pip.parse(
+    hub_name = "proto_stubs_deps",
+    python_interpreter = "/opt/tbotspython/bin/python",
+    python_version = "3.12",
+    requirements_lock = "//proto/python_stubs:requirements_lock.txt",
+)
+use_repo(pip, "proto_stubs_deps")
+
+pip.parse(
     hub_name = "nanopb_deps",
     python_interpreter = "/opt/tbotspython/bin/python",
     python_version = "3.12",
