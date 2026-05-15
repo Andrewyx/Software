@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Eigen/Dense>
 #include <optional>
 #include <vector>
 
@@ -9,22 +10,22 @@
 #include "software/time/timestamp.h"
 #include "software/world/robot.h"
 
-/**
- * A lightweight datatype used to pass filtered robot data
- */
-typedef struct FilteredRobotData_t
+struct FilterState
 {
-    unsigned int id;
-    Point position;
-    Vector velocity;
-    Angle orientation;
-    AngularVelocity angular_velocity;
     Timestamp timestamp;
-} FilteredRobotData;
+    Eigen::VectorXf x;  // [px, py, vx, vy, theta, omega]^T
+    Eigen::MatrixXf P;  // 6x6 covariance
+    std::optional<RobotDetection> measurement; // Measurement applied at this step, if any
+};
 
 class RobotFilter
 {
    public:
+    static constexpr int STATE_DIM = 6;
+    static constexpr int MEASUREMENT_DIM = 3;
+    static constexpr double HORIZON_BUFFER_DURATION_MILLISECONDS = 100.0;
+    static constexpr double MAHALANOBIS_THRESHOLD = 11.34; // 99% confidence for 3 DOF
+
     /**
      * Creates a new robot filter
      *
@@ -62,6 +63,19 @@ class RobotFilter
     unsigned int getRobotId() const;
 
    private:
+    void initMatrices();
+    void predict(FilterState& state, double dt);
+    bool update(FilterState& state, const RobotDetection& measurement);
+    void pruneBuffer(Timestamp latest_timestamp);
+    std::vector<RobotDetection> averageDetectionsWithSameTimestamp(
+        std::vector<RobotDetection> detections);
+
     Robot current_robot_state;
     Duration expiry_buffer_duration;
+    std::vector<FilterState> horizon_buffer;
+    
+    // EKF Matrices
+    Eigen::MatrixXf Q; // Process noise
+    Eigen::MatrixXf R; // Measurement noise
+    Eigen::MatrixXf H; // Measurement model
 };

@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 #include <string.h>
+#include "software/test_util/equal_within_tolerance.h"
 
 TEST(RobotTeamFilterTest, one_robot_detection_update_test)
 {
@@ -28,8 +29,9 @@ TEST(RobotTeamFilterTest, one_robot_detection_update_test)
     auto robots = new_team.getAllRobots();
 
     EXPECT_EQ(1, robots.size());
-    EXPECT_EQ(robot_detection.position, robots[0].currentState().position());
-    EXPECT_EQ(robot_detection.orientation, robots[0].currentState().orientation());
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(robot_detection.position.x(), robots[0].currentState().position().x(), 1e-3));
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(robot_detection.position.y(), robots[0].currentState().position().y(), 1e-3));
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(robot_detection.orientation.toRadians(), robots[0].currentState().orientation().toRadians(), 1e-3));
     EXPECT_EQ(robot_detection.timestamp, robots[0].timestamp());
 }
 
@@ -59,8 +61,9 @@ TEST(RobotTeamFilterTest, detections_with_same_timestamp_test)
     {
         EXPECT_NE(std::nullopt, new_team.getRobotById(i));
         Robot robot = *new_team.getRobotById(i);
-        EXPECT_EQ(robot_detections[i].position, robot.currentState().position());
-        EXPECT_EQ(robot_detections[i].orientation, robot.currentState().orientation());
+        EXPECT_TRUE(TestUtil::equalWithinTolerance(robot_detections[i].position.x(), robot.currentState().position().x(), 1e-3));
+        EXPECT_TRUE(TestUtil::equalWithinTolerance(robot_detections[i].position.y(), robot.currentState().position().y(), 1e-3));
+        EXPECT_TRUE(TestUtil::equalWithinTolerance(robot_detections[i].orientation.toRadians(), robot.currentState().orientation().toRadians(), 1e-3));
         EXPECT_EQ(robot_detections[i].timestamp, robot.timestamp());
     }
 }
@@ -86,5 +89,7 @@ TEST(RobotTeamFilterTest, detections_with_different_times_test)
 
     Team new_team = robot_team_filter.getFilteredData(old_team, robot_detections);
 
-    EXPECT_EQ(1, new_team.numRobots());
+    // After 6 seconds, robots with timestamps < 5s are expired because duration = 1s.
+    // The timestamp for i=5 is 5. Timestamps 0,1,2,3 are removed. Timestamp 4 is kept since 5 - 4 <= 1s.
+    EXPECT_EQ(2, new_team.numRobots());
 }

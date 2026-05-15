@@ -47,6 +47,7 @@ cc_library(
     deps = [
         ":vision_detection",
         "//software/world:robot",
+        "@eigen",
     ],
 )
 

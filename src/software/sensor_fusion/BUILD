@@ -27,6 +27,7 @@ cc_test(
         "//proto/message_translation:ssl_geometry",
         "//proto/message_translation:ssl_wrapper",
         "//shared/test_util:tbots_gtest_main",
+        "//software/test_util",
     ],
 )
 

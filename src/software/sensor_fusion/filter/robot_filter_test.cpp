@@ -1,7 +1,6 @@
 #include "software/sensor_fusion/filter/robot_filter.h"
 
 #include <gtest/gtest.h>
-#include <string.h>
 
 #include "software/test_util/equal_within_tolerance.h"
 
@@ -10,6 +9,9 @@ TEST(RobotFilterTest, no_match_robot_data_robot_state_expired_test)
     Robot robot(1, Point(0, 0), Vector(0, 0), Angle::fromRadians(0),
                 AngularVelocity::fromRadians(0), Timestamp::fromSeconds(0));
     RobotFilter robot_filter(robot, Duration::fromSeconds(10));
+    // Provide a detection for a DIFFERENT robot (id 2) at time 11.
+    // The filter robot is ID 1. At time 11, robot 1 has had no data for 11 seconds.
+    // Expiry is 10s. So it should expire.
     std::vector<RobotDetection> new_robot_data = {
         {2, Point(2, 0), Angle::fromRadians(1), 0.5, Timestamp::fromSeconds(11)}};
     EXPECT_EQ(std::nullopt, robot_filter.getFilteredData(new_robot_data));
@@ -22,54 +24,101 @@ TEST(RobotFilterTest, no_match_robot_data_robot_state_not_expired_test)
     RobotFilter robot_filter(robot, Duration::fromSeconds(10));
     std::vector<RobotDetection> new_robot_data = {
         {2, Point(2, 0), Angle::fromRadians(1), 0.5, Timestamp::fromSeconds(9)}};
-    std::optional<Robot> op_robot(robot);
-    EXPECT_EQ(op_robot.value(), robot_filter.getFilteredData(new_robot_data).value());
+    
+    // No data for robot 1, but time is 9s which is < 10s expiry.
+    // Should return the original state (time 0).
+    auto filtered_robot = robot_filter.getFilteredData(new_robot_data);
+    ASSERT_TRUE(filtered_robot.has_value());
+    EXPECT_EQ(robot.id(), filtered_robot->id());
+    EXPECT_EQ(robot.position(), filtered_robot->position());
+    EXPECT_EQ(robot.velocity(), filtered_robot->velocity());
 }
 
-
-TEST(RobotFilterTest, one_match_robot_data_robot_state_not_expired_test)
+TEST(RobotFilterTest, stationary_robot_test)
 {
-    Robot robot(1, Point(0, 0), Vector(0, 0), Angle::fromRadians(0),
+    Robot robot(1, Point(1.0, 1.0), Vector(0, 0), Angle::fromRadians(0.5),
                 AngularVelocity::fromRadians(0), Timestamp::fromSeconds(0));
     RobotFilter robot_filter(robot, Duration::fromSeconds(10));
-    std::vector<RobotDetection> new_robot_data = {
-        {1, Point(2, 0), Angle::fromRadians(1), 0.5, Timestamp::fromSeconds(9)}};
-    std::optional<Robot> op_robot;
-    op_robot.emplace(Robot(1, Point(2, 0), Vector(2.0 / 9, 0), Angle::fromRadians(1),
-                           AngularVelocity::fromRadians(1.0 / 9),
-                           Timestamp::fromSeconds(9)));
-    EXPECT_EQ(op_robot.value(), robot_filter.getFilteredData(new_robot_data).value());
+
+    // Feed several stationary measurements
+    for (int i = 1; i <= 10; ++i)
+    {
+        std::vector<RobotDetection> new_robot_data = {
+            {1, Point(1.0, 1.0), Angle::fromRadians(0.5), 1.0, Timestamp::fromSeconds(i * 0.1)}};
+        robot_filter.getFilteredData(new_robot_data);
+    }
+
+    auto filtered_robot = robot_filter.getFilteredData({});
+    ASSERT_TRUE(filtered_robot.has_value());
+    
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(1.0, filtered_robot->position().x(), 0.1));
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(1.0, filtered_robot->position().y(), 0.1));
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(0.0, filtered_robot->velocity().x(), 0.1));
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(0.0, filtered_robot->velocity().y(), 0.1));
 }
 
-TEST(RobotFilterTest, two_match_robot_data_robot_state_not_expired_test)
+TEST(RobotFilterTest, horizon_buffer_out_of_order_test)
 {
-    Robot robot(1, Point(0, 0), Vector(0, 0), Angle::fromRadians(0),
+    Robot robot(1, Point(0.0, 0.0), Vector(0, 0), Angle::fromRadians(0.0),
                 AngularVelocity::fromRadians(0), Timestamp::fromSeconds(0));
-    RobotFilter robot_filter(robot, Duration::fromSeconds(10));
-    std::vector<RobotDetection> new_robot_data = {
-        {1, Point(1.5, 0), Angle::fromRadians(0.75), 0.5, Timestamp::fromSeconds(8.5)},
-        {1, Point(2.5, 0), Angle::fromRadians(1.25), 0.5, Timestamp::fromSeconds(9.5)}};
-    std::optional<Robot> op_robot;
-    op_robot.emplace(Robot(1, Point(2, 0), Vector(2.0 / 9, 0), Angle::fromRadians(1),
-                           AngularVelocity::fromRadians(1.0 / 9),
-                           Timestamp::fromSeconds(9)));
-    EXPECT_EQ(op_robot.value(), robot_filter.getFilteredData(new_robot_data).value());
+    
+    // Filter 1: In-order packets
+    RobotFilter filter_in_order(robot, Duration::fromSeconds(10));
+    filter_in_order.getFilteredData({{1, Point(1.0, 0), Angle::fromRadians(0), 1.0, Timestamp::fromSeconds(0.01)}});
+    filter_in_order.getFilteredData({{1, Point(2.0, 0), Angle::fromRadians(0), 1.0, Timestamp::fromSeconds(0.02)}});
+    filter_in_order.getFilteredData({{1, Point(3.0, 0), Angle::fromRadians(0), 1.0, Timestamp::fromSeconds(0.03)}});
+    auto robot_in_order = filter_in_order.getFilteredData({});
+
+    // Filter 2: Out-of-order packets (t=0.03 arrives before t=0.02)
+    RobotFilter filter_out_of_order(robot, Duration::fromSeconds(10));
+    filter_out_of_order.getFilteredData({{1, Point(1.0, 0), Angle::fromRadians(0), 1.0, Timestamp::fromSeconds(0.01)}});
+    filter_out_of_order.getFilteredData({{1, Point(3.0, 0), Angle::fromRadians(0), 1.0, Timestamp::fromSeconds(0.03)}});
+    filter_out_of_order.getFilteredData({{1, Point(2.0, 0), Angle::fromRadians(0), 1.0, Timestamp::fromSeconds(0.02)}});
+    auto robot_out_of_order = filter_out_of_order.getFilteredData({});
+
+    ASSERT_TRUE(robot_in_order.has_value());
+    ASSERT_TRUE(robot_out_of_order.has_value());
+
+    // Because the horizon buffer rewinds and replays, the end state should be perfectly identical
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(robot_in_order->position().x(), robot_out_of_order->position().x(), 1e-4));
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(robot_in_order->velocity().x(), robot_out_of_order->velocity().x(), 1e-4));
 }
 
-TEST(RobotFilterTest, large_positive_orientation_test)
+TEST(RobotFilterTest, horizon_buffer_discard_old_test)
 {
-    Robot robot(1, Point(0, 0), Vector(0, 0), Angle::fromDegrees(1.0),
+    Robot robot(1, Point(0.0, 0.0), Vector(0, 0), Angle::fromRadians(0.0),
                 AngularVelocity::fromRadians(0), Timestamp::fromSeconds(0));
     RobotFilter robot_filter(robot, Duration::fromSeconds(10));
-    std::vector<RobotDetection> new_robot_data = {
-        {1, Point(0, 0), Angle::fromDegrees(359), 0.5, Timestamp::fromSeconds(1)}};
 
-    Robot expected_robot(1, Point(0, 0), Vector(0, 0), Angle::fromDegrees(359.0),
-                         AngularVelocity::fromDegrees(-2.0), Timestamp::fromSeconds(1));
-    Robot filtered_robot = robot_filter.getFilteredData(new_robot_data).value();
+    robot_filter.getFilteredData({{1, Point(1.0, 0), Angle::fromRadians(0), 1.0, Timestamp::fromSeconds(0.05)}});
+    robot_filter.getFilteredData({{1, Point(2.0, 0), Angle::fromRadians(0), 1.0, Timestamp::fromSeconds(0.20)}}); // Advances time to 0.20
+    
+    // This packet is at 0.01. The cutoff is 0.20 - 0.100 = 0.10. 
+    // It should be completely discarded and have no effect.
+    robot_filter.getFilteredData({{1, Point(100.0, 0), Angle::fromRadians(0), 1.0, Timestamp::fromSeconds(0.01)}});
+    
+    auto final_robot = robot_filter.getFilteredData({});
+    ASSERT_TRUE(final_robot.has_value());
+    
+    // Position should NOT be influenced by the 100.0 outlier at 0.01
+    EXPECT_TRUE(final_robot->position().x() < 10.0); 
+}
 
-    EXPECT_TRUE(TestUtil::equalWithinTolerance(
-        expected_robot.angularVelocity().toDegrees(),
-        filtered_robot.angularVelocity().toDegrees(), 1e-6));
-    EXPECT_EQ(expected_robot, filtered_robot);
+TEST(RobotFilterTest, angle_wrapping_test)
+{
+    Robot robot(1, Point(0, 0), Vector(0, 0), Angle::fromDegrees(170.0),
+                AngularVelocity::fromRadians(0), Timestamp::fromSeconds(0));
+    RobotFilter robot_filter(robot, Duration::fromSeconds(10));
+
+    // Robot rotates from 170 to 175 to -175 (which is 185)
+    robot_filter.getFilteredData({{1, Point(0, 0), Angle::fromDegrees(175), 1.0, Timestamp::fromSeconds(0.1)}});
+    robot_filter.getFilteredData({{1, Point(0, 0), Angle::fromDegrees(-175), 1.0, Timestamp::fromSeconds(0.2)}});
+
+    auto filtered_robot = robot_filter.getFilteredData({});
+    ASSERT_TRUE(filtered_robot.has_value());
+
+    // Angular velocity should be positive (rotating counter-clockwise)
+    // Distance from 170 to -175 is 15 degrees over 0.2 seconds -> ~75 deg/sec
+    EXPECT_TRUE(filtered_robot->angularVelocity().toDegrees() > 0.0);
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(-175.0, filtered_robot->orientation().toDegrees(), 10.0));
 }

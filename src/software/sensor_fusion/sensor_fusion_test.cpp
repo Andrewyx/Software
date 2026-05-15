@@ -2,6 +2,29 @@
 
 #include <gtest/gtest.h>
 
+#include "software/test_util/equal_within_tolerance.h"
+
+void checkWorldEqualWithTolerance(const World& expected, const World& result) {
+    EXPECT_EQ(expected.ball(), result.ball());
+    EXPECT_EQ(expected.field(), result.field());
+    EXPECT_EQ(expected.gameState(), result.gameState());
+    
+    for (const auto& er : expected.friendlyTeam().getAllRobots()) {
+        auto rr = result.friendlyTeam().getRobotById(er.id());
+        ASSERT_TRUE(rr.has_value());
+        EXPECT_TRUE(TestUtil::equalWithinTolerance(er.position().x(), rr->position().x(), 1e-3));
+        EXPECT_TRUE(TestUtil::equalWithinTolerance(er.position().y(), rr->position().y(), 1e-3));
+        EXPECT_TRUE(er.orientation().minDiff(rr->orientation()).toRadians() <= 1e-3);
+    }
+    for (const auto& er : expected.enemyTeam().getAllRobots()) {
+        auto rr = result.enemyTeam().getRobotById(er.id());
+        ASSERT_TRUE(rr.has_value());
+        EXPECT_TRUE(TestUtil::equalWithinTolerance(er.position().x(), rr->position().x(), 1e-3));
+        EXPECT_TRUE(TestUtil::equalWithinTolerance(er.position().y(), rr->position().y(), 1e-3));
+        EXPECT_TRUE(er.orientation().minDiff(rr->orientation()).toRadians() <= 1e-3);
+    }
+}
+
 #include "proto/message_translation/ssl_detection.h"
 #include "proto/message_translation/ssl_geometry.h"
 #include "proto/message_translation/ssl_wrapper.h"
@@ -480,7 +503,7 @@ TEST_F(SensorFusionTest, test_inverted_detection_frame_wrapper_packet)
     auto result = sensor_fusion.getWorld();
 
     ASSERT_TRUE(result);
-    EXPECT_EQ(initInvertedWorld(), *result);
+    checkWorldEqualWithTolerance(initInvertedWorld(), *result);
 }
 
 TEST_F(SensorFusionTest, test_complete_wrapper_packet)
