@@ -15,16 +15,17 @@ struct FilterState
     Timestamp timestamp;
     Eigen::VectorXf x;  // [px, py, vx, vy, theta, omega]^T
     Eigen::MatrixXf P;  // 6x6 covariance
-    std::optional<RobotDetection> measurement; // Measurement applied at this step, if any
+    std::optional<RobotDetection>
+        measurement;  // Measurement applied at this step, if any
 };
 
 class RobotFilter
 {
    public:
-    static constexpr int STATE_DIM = 6;
-    static constexpr int MEASUREMENT_DIM = 3;
+    static constexpr int STATE_DIM                               = 6;
+    static constexpr int MEASUREMENT_DIM                         = 3;
     static constexpr double HORIZON_BUFFER_DURATION_MILLISECONDS = 100.0;
-    static constexpr double MAHALANOBIS_THRESHOLD = 11.34; // 99% confidence for 3 DOF
+    static constexpr double MAHALANOBIS_THRESHOLD = 11.34;  // 99% confidence for 3 DOF
 
     /**
      * Creates a new robot filter
@@ -73,9 +74,9 @@ class RobotFilter
     Robot current_robot_state;
     Duration expiry_buffer_duration;
     std::vector<FilterState> horizon_buffer;
-    
+
     // EKF Matrices
-    Eigen::MatrixXf Q; // Process noise
-    Eigen::MatrixXf R; // Measurement noise
-    Eigen::MatrixXf H; // Measurement model
+    Eigen::MatrixXf Q;  // Process noise
+    Eigen::MatrixXf R;  // Measurement noise
+    Eigen::MatrixXf H;  // Measurement model
 };

@@ -4,23 +4,30 @@
 
 #include "software/test_util/equal_within_tolerance.h"
 
-void checkWorldEqualWithTolerance(const World& expected, const World& result) {
+void checkWorldEqualWithTolerance(const World& expected, const World& result)
+{
     EXPECT_EQ(expected.ball(), result.ball());
     EXPECT_EQ(expected.field(), result.field());
     EXPECT_EQ(expected.gameState(), result.gameState());
-    
-    for (const auto& er : expected.friendlyTeam().getAllRobots()) {
+
+    for (const auto& er : expected.friendlyTeam().getAllRobots())
+    {
         auto rr = result.friendlyTeam().getRobotById(er.id());
         ASSERT_TRUE(rr.has_value());
-        EXPECT_TRUE(TestUtil::equalWithinTolerance(er.position().x(), rr->position().x(), 1e-3));
-        EXPECT_TRUE(TestUtil::equalWithinTolerance(er.position().y(), rr->position().y(), 1e-3));
+        EXPECT_TRUE(
+            TestUtil::equalWithinTolerance(er.position().x(), rr->position().x(), 1e-3));
+        EXPECT_TRUE(
+            TestUtil::equalWithinTolerance(er.position().y(), rr->position().y(), 1e-3));
         EXPECT_TRUE(er.orientation().minDiff(rr->orientation()).toRadians() <= 1e-3);
     }
-    for (const auto& er : expected.enemyTeam().getAllRobots()) {
+    for (const auto& er : expected.enemyTeam().getAllRobots())
+    {
         auto rr = result.enemyTeam().getRobotById(er.id());
         ASSERT_TRUE(rr.has_value());
-        EXPECT_TRUE(TestUtil::equalWithinTolerance(er.position().x(), rr->position().x(), 1e-3));
-        EXPECT_TRUE(TestUtil::equalWithinTolerance(er.position().y(), rr->position().y(), 1e-3));
+        EXPECT_TRUE(
+            TestUtil::equalWithinTolerance(er.position().x(), rr->position().x(), 1e-3));
+        EXPECT_TRUE(
+            TestUtil::equalWithinTolerance(er.position().y(), rr->position().y(), 1e-3));
         EXPECT_TRUE(er.orientation().minDiff(rr->orientation()).toRadians() <= 1e-3);
     }
 }
