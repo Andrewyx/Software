@@ -27,7 +27,10 @@ class TmcMotorController : public MotorController
 
     int readThenWriteVelocity(MotorIndex motor, int target_velocity) override;
 
-    void updateEuclideanVelocity(EuclideanSpace_t target_euclidean_velocity) override;
+    void updateEuclideanVelocity(
+        EuclideanSpace_t current_euclidean_velocity,
+        EuclideanSpace_t target_euclidean_velocity,
+        const MotorController::DynamicsData& data) override;
 
     /**
      * Trinamic API binding, sets spi_demux_select_0|1 pins appropriately and

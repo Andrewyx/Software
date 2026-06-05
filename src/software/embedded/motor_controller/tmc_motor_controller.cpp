@@ -78,7 +78,9 @@ int TmcMotorController::readThenWriteVelocity(const MotorIndex motor,
 }
 
 void TmcMotorController::updateEuclideanVelocity(
-    EuclideanSpace_t target_euclidean_velocity)
+    EuclideanSpace_t current_euclidean_velocity,
+    EuclideanSpace_t target_euclidean_velocity,
+    const MotorController::DynamicsData& data)
 {
 }
 

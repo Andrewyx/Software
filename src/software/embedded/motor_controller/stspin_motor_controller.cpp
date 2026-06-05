@@ -6,6 +6,8 @@
 #include <iomanip>
 #include <thread>
 
+#include "software/embedded/motor_controller/motor_index.h"
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include "cppcrc.h"
@@ -43,16 +45,25 @@ void StSpinMotorController::setup()
         motor_status_[motor].enabled = true;
     }
 
-    for (const MotorIndex motor : driveMotors())
-    {
-        sendAndReceiveFrame(motor, SetPidSpeedKpKiFrame{.kp = SPEED_PID_PROPORTIONAL_GAIN,
-                                                        .ki = SPEED_PID_INTEGRAL_GAIN});
-        sendAndReceiveFrame(motor,
-                            SetPidTorqueKpKiFrame{.kp = TORQUE_PID_PROPORTIONAL_GAIN,
-                                                  .ki = TORQUE_PID_INTEGRAL_GAIN});
-        sendAndReceiveFrame(motor, SetPidTorqueKpKiFrame{.kp = FLUX_PID_PROPORTIONAL_GAIN,
-                                                         .ki = FLUX_PID_INTEGRAL_GAIN});
-    }
+    // for (const MotorIndex motor : driveMotors())
+    // {
+    //     sendAndReceiveFrame(motor, SetPidSpeedKpKiFrame{.kp =
+    //     SPEED_PID_PROPORTIONAL_GAIN,
+    //                                                     .ki =
+    //                                                     SPEED_PID_INTEGRAL_GAIN});
+    // }
+    sendAndReceiveFrame(MotorIndex::FRONT_LEFT,
+                        SetPidSpeedKpKiFrame{.kp = SPEED_PID_PROPORTIONAL_GAIN_FRONT,
+                                             .ki = SPEED_PID_INTEGRAL_GAIN_FRONT});
+    sendAndReceiveFrame(MotorIndex::FRONT_RIGHT,
+                        SetPidSpeedKpKiFrame{.kp = SPEED_PID_PROPORTIONAL_GAIN_FRONT,
+                                             .ki = SPEED_PID_INTEGRAL_GAIN_FRONT});
+    sendAndReceiveFrame(MotorIndex::BACK_LEFT,
+                        SetPidSpeedKpKiFrame{.kp = SPEED_PID_PROPORTIONAL_GAIN_BACK,
+                                             .ki = SPEED_PID_INTEGRAL_GAIN_BACK});
+    sendAndReceiveFrame(MotorIndex::BACK_RIGHT,
+                        SetPidSpeedKpKiFrame{.kp = SPEED_PID_PROPORTIONAL_GAIN_BACK,
+                                             .ki = SPEED_PID_INTEGRAL_GAIN_BACK});
 }
 
 void StSpinMotorController::reset()
@@ -193,12 +204,16 @@ int StSpinMotorController::readThenWriteVelocity(const MotorIndex motor,
 }
 
 void StSpinMotorController::updateEuclideanVelocity(
-    EuclideanSpace_t target_euclidean_velocity)
+    EuclideanSpace_t current_euclidean_velocity,
+    EuclideanSpace_t target_euclidean_velocity,
+    const MotorController::DynamicsData& data)
 {
-    const Vector local_velocity(target_euclidean_velocity[1],
+    const Vector target_local_velocity(target_euclidean_velocity[1],
                                 -target_euclidean_velocity[0]);
+    const Vector current_local_velocity(current_euclidean_velocity[1],
+                                -current_euclidean_velocity[0]);
 
-    if (local_velocity.length() <= 0.01)
+    if (target_local_velocity.length() <= 0.01)
     {
         sendAndReceiveFrame(
             MotorIndex::FRONT_LEFT,
@@ -221,25 +236,25 @@ void StSpinMotorController::updateEuclideanVelocity(
         return;
     }
 
-    const Angle direction = local_velocity.orientation();
+    const Angle direction = target_local_velocity.orientation();
 
     const Angle front_wheel_angle =
         Angle::fromDegrees(robot_constants_.front_wheel_angle_deg);
     const Angle back_wheel_angle =
         Angle::fromDegrees(robot_constants_.back_wheel_angle_deg);
 
-    const int16_t front_left_ks =
-        static_cast<int16_t>(MAX_SPEED_FEED_FORWARD_STATIC_GAIN_FRONT *
-                             std::abs((direction + front_wheel_angle).sin()));
-    const int16_t front_right_ks =
-        static_cast<int16_t>(MAX_SPEED_FEED_FORWARD_STATIC_GAIN_FRONT *
-                             std::abs((direction - front_wheel_angle).sin()));
-    const int16_t back_right_ks =
-        static_cast<int16_t>(MAX_SPEED_FEED_FORWARD_STATIC_GAIN_BACK *
-                             std::abs((direction + back_wheel_angle).sin()));
-    const int16_t back_left_ks =
-        static_cast<int16_t>(MAX_SPEED_FEED_FORWARD_STATIC_GAIN_BACK *
-                             std::abs((direction - back_wheel_angle).sin()));
+    const int16_t front_left_ks = static_cast<int16_t>(
+        MAX_SPEED_FEED_FORWARD_STATIC_GAIN_FRONT *
+        std::abs((direction - Angle::quarter() + front_wheel_angle).sin()));
+    const int16_t front_right_ks = static_cast<int16_t>(
+        MAX_SPEED_FEED_FORWARD_STATIC_GAIN_FRONT *
+        std::abs((direction + Angle::quarter() - front_wheel_angle).sin()));
+    const int16_t back_right_ks = static_cast<int16_t>(
+        MAX_SPEED_FEED_FORWARD_STATIC_GAIN_BACK *
+        std::abs((direction + Angle::quarter() + back_wheel_angle).sin()));
+    const int16_t back_left_ks = static_cast<int16_t>(
+        MAX_SPEED_FEED_FORWARD_STATIC_GAIN_BACK *
+        std::abs((direction - Angle::quarter() - back_wheel_angle).sin()));
 
     LOG(PLOTJUGGLER) << *createPlotJugglerValue({
         {"front_left_ks", front_left_ks},
@@ -278,6 +293,15 @@ void StSpinMotorController::updateEuclideanVelocity(
                         SetSpeedFeedForwardKaKvFrame{.ka = 0, .kv = back_right_kv});
     sendAndReceiveFrame(MotorIndex::BACK_LEFT,
                         SetSpeedFeedForwardKaKvFrame{.ka = 0, .kv = back_left_kv});
+
+    LOG(PLOTJUGGLER) << *createPlotJugglerValue({
+        {"localizer_vel_x", data.vel.x()},
+        {"localizer_vel_y", data.vel.y()},
+        {"target_vel_x", target_local_velocity.x()},
+        {"target_vel_y", target_local_velocity.y()},
+    });
+
+    sendAggressiveFrames(current_local_velocity, target_local_velocity, data);
 }
 
 void StSpinMotorController::immediatelyDisable()
@@ -288,6 +312,74 @@ void StSpinMotorController::immediatelyDisable()
         readThenWriteVelocity(motor, 0);
     }
 }
+
+void StSpinMotorController::sendAggressiveFrames(
+    const Vector& current_euclidean_velocity,
+    const Vector& target_euclidean_velocity,
+    const MotorController::DynamicsData& data)
+{
+    if (is_aggressive_)
+    {
+        LOG(PLOTJUGGLER) << *createPlotJugglerValue({
+            {"is_aggressive", 1},
+        });
+    }
+    else
+    {
+        LOG(PLOTJUGGLER) << *createPlotJugglerValue({
+        {"is_aggressive", 0},
+        });
+    }
+
+    static constexpr int FRONT_GAIN_P = 80;
+    static constexpr int BACK_GAIN_P = 80;
+    static constexpr int FRONT_GAIN_I = 10;
+    static constexpr int BACK_GAIN_I = 10;
+
+    // if ((target_euclidean_velocity - data.vel).length() > 0.1)
+    if ((target_euclidean_velocity - current_euclidean_velocity).length() > 0.5)
+    {
+        is_aggressive_ = true;
+
+        sendAndReceiveFrame(MotorIndex::FRONT_LEFT,
+                                SetPidSpeedKpKiFrame{
+                                    .kp = SPEED_PID_PROPORTIONAL_GAIN_FRONT + FRONT_GAIN_P,
+                                    .ki = SPEED_PID_INTEGRAL_GAIN_FRONT + FRONT_GAIN_I
+                                });
+        sendAndReceiveFrame(MotorIndex::FRONT_RIGHT,
+                            SetPidSpeedKpKiFrame{
+                                .kp = SPEED_PID_PROPORTIONAL_GAIN_FRONT + FRONT_GAIN_P,
+                                .ki = SPEED_PID_INTEGRAL_GAIN_FRONT + FRONT_GAIN_I
+                            });
+        sendAndReceiveFrame(MotorIndex::BACK_LEFT,
+                            SetPidSpeedKpKiFrame{
+                                .kp = SPEED_PID_PROPORTIONAL_GAIN_BACK + BACK_GAIN_P,
+                                .ki = SPEED_PID_INTEGRAL_GAIN_BACK + BACK_GAIN_I
+                            });
+        sendAndReceiveFrame(MotorIndex::BACK_RIGHT,
+                            SetPidSpeedKpKiFrame{
+                                .kp = SPEED_PID_PROPORTIONAL_GAIN_BACK + BACK_GAIN_P,
+                                .ki = SPEED_PID_INTEGRAL_GAIN_BACK + BACK_GAIN_I
+                            });
+    } else
+    {
+        is_aggressive_ = false;
+        sendAndReceiveFrame(MotorIndex::FRONT_LEFT,
+                    SetPidSpeedKpKiFrame{.kp = SPEED_PID_PROPORTIONAL_GAIN_FRONT,
+                                         .ki = SPEED_PID_INTEGRAL_GAIN_FRONT});
+        sendAndReceiveFrame(MotorIndex::FRONT_RIGHT,
+                            SetPidSpeedKpKiFrame{.kp = SPEED_PID_PROPORTIONAL_GAIN_FRONT,
+                                                 .ki = SPEED_PID_INTEGRAL_GAIN_FRONT});
+        sendAndReceiveFrame(MotorIndex::BACK_LEFT,
+                            SetPidSpeedKpKiFrame{.kp = SPEED_PID_PROPORTIONAL_GAIN_BACK,
+                                                 .ki = SPEED_PID_INTEGRAL_GAIN_BACK});
+        sendAndReceiveFrame(MotorIndex::BACK_RIGHT,
+                            SetPidSpeedKpKiFrame{.kp = SPEED_PID_PROPORTIONAL_GAIN_BACK,
+                                                 .ki = SPEED_PID_INTEGRAL_GAIN_BACK});
+    }
+
+}
+
 
 void StSpinMotorController::openSpiFileDescriptor(const MotorIndex motor)
 {

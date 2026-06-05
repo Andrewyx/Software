@@ -106,7 +106,8 @@ TbotsProto::MotorStatus MotorService::createMotorStatus(
 }
 
 TbotsProto::MotorStatus MotorService::poll(const TbotsProto::MotorControl& motor_control,
-                                           const double time_elapsed_since_last_poll_s)
+                                           const double time_elapsed_since_last_poll_s,
+                                           const MotorController::DynamicsData& data)
 {
     if (anyMotorRequiresReset())
     {
@@ -170,7 +171,7 @@ TbotsProto::MotorStatus MotorService::poll(const TbotsProto::MotorControl& motor
             direct_velocity.velocity().x_component_meters(),
             direct_velocity.angular_velocity().radians_per_second()};
 
-        motor_controller_->updateEuclideanVelocity(target_euclidean_velocity);
+        motor_controller_->updateEuclideanVelocity(current_euclidean_velocity, target_euclidean_velocity, data);
 
         target_wheel_velocities_ =
             euclidean_to_four_wheel_.getWheelVelocity(target_euclidean_velocity);

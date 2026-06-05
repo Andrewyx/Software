@@ -456,7 +456,12 @@ TbotsProto::MotorStatus Thunderloop::pollMotorService(
 
     double time_since_prev_iteration_s =
         getMilliseconds(time_since_prev_iteration) * SECONDS_PER_MILLISECOND;
-    return motor_service_->poll(motor_control, time_since_prev_iteration_s);
+    return motor_service_->poll(motor_control, time_since_prev_iteration_s, MotorController::DynamicsData{
+        robot_localizer_.getPosition(),
+        robot_localizer_.getVelocity(),
+        robot_localizer_.getOrientation(),
+        robot_localizer_.getAngularVelocity()
+    });
 }
 
 TbotsProto::PowerStatus Thunderloop::pollPowerService(struct timespec& poll_time)

@@ -27,7 +27,10 @@ class StSpinMotorController : public MotorController
 
     int readThenWriteVelocity(MotorIndex motor, int target_velocity) override;
 
-    void updateEuclideanVelocity(EuclideanSpace_t target_euclidean_velocity) override;
+    void updateEuclideanVelocity(
+        EuclideanSpace_t current_euclidean_velocity,
+        EuclideanSpace_t target_euclidean_velocity,
+        const MotorController::DynamicsData& data) override;
 
     void immediatelyDisable() override;
 
@@ -63,11 +66,14 @@ class StSpinMotorController : public MotorController
     static constexpr int TORQUE_PID_PROPORTIONAL_GAIN = 3304;
     static constexpr int TORQUE_PID_INTEGRAL_GAIN     = 1693;
 
-    static constexpr int SPEED_PID_PROPORTIONAL_GAIN = 1300;
-    static constexpr int SPEED_PID_INTEGRAL_GAIN     = 420;
+    static constexpr int SPEED_PID_PROPORTIONAL_GAIN_FRONT = 1350;
+    static constexpr int SPEED_PID_INTEGRAL_GAIN_FRONT     = 60;
 
-    static constexpr int MAX_SPEED_FEED_FORWARD_STATIC_GAIN_FRONT  = 1800;
-    static constexpr int MAX_SPEED_FEED_FORWARD_STATIC_GAIN_BACK   = 825;
+    static constexpr int SPEED_PID_PROPORTIONAL_GAIN_BACK = 1300;
+    static constexpr int SPEED_PID_INTEGRAL_GAIN_BACK     = 40;
+
+    static constexpr int MAX_SPEED_FEED_FORWARD_STATIC_GAIN_FRONT  = 0;
+    static constexpr int MAX_SPEED_FEED_FORWARD_STATIC_GAIN_BACK   = 0;
     static constexpr int MAX_SPEED_FEED_FORWARD_KINETIC_GAIN_FRONT = 0;
     static constexpr int MAX_SPEED_FEED_FORWARD_KINETIC_GAIN_BACK  = 0;
 
@@ -149,6 +155,13 @@ class StSpinMotorController : public MotorController
      * @param motor the motor to plot the status of
      */
     void sendMotorStatusToPlotJuggler(MotorIndex motor);
+
+    void sendAggressiveFrames(
+        const Vector& current_euclidean_velocity,
+        const Vector& target_euclidean_velocity,
+        const MotorController::DynamicsData& data
+    );
+    bool is_aggressive_ = false;
 
     friend class StSpinMotorControllerTest;
 };

@@ -7,6 +7,7 @@
 #include "shared/robot_constants.h"
 #include "software/embedded/gpio/gpio.h"
 #include "software/embedded/motor_controller/motor_controller.h"
+#include "software/geom/point.h"
 #include "software/physics/euclidean_to_wheel.h"
 
 /**
@@ -36,7 +37,8 @@ class MotorService
      * @return The status of all the motors
      */
     TbotsProto::MotorStatus poll(const TbotsProto::MotorControl& motor_control,
-                                 double time_elapsed_since_last_poll_s);
+                                 double time_elapsed_since_last_poll_s,
+                                 const MotorController::DynamicsData& data);
 
     /**
      * Clears previous faults, configures the motor and checks encoder connections.

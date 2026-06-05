@@ -2,6 +2,7 @@
 
 #include "software/embedded/motor_controller/motor_fault_indicator.h"
 #include "software/embedded/motor_controller/motor_index.h"
+#include "software/geom/point.h"
 #include "software/physics/euclidean_to_wheel.h"
 
 /**
@@ -13,6 +14,13 @@
 class MotorController
 {
    public:
+    struct DynamicsData
+    {
+        Point pos;
+        Vector vel;
+        Angle rot;
+        AngularVelocity ang_vel;
+    };
     virtual ~MotorController() = default;
 
     /**
@@ -47,8 +55,12 @@ class MotorController
      * in Euclidean space.
      *
      * @param target_euclidean_velocity the target local velocity of the robot
+     * @param current_euclidean_velocity the present local velocity of the robot
      */
-    virtual void updateEuclideanVelocity(EuclideanSpace_t target_euclidean_velocity) = 0;
+    virtual void updateEuclideanVelocity(
+        EuclideanSpace_t current_euclidean_velocity,
+        EuclideanSpace_t target_euclidean_velocity,
+        const MotorController::DynamicsData& data) = 0;
 
     /**
      * Immediately disables all motors.
