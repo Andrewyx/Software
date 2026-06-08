@@ -30,11 +30,7 @@ cc_library(
     hdrs = ["power.h"],
     linkopts = ["-latomic"],  # Necessary due to <atomic> not containing load/store for all sizes
     deps = [
-        "//shared/uart_framing",
-        "//software/logger",
-        "//software/uart:boost_uart_communication",
-        "@boost//:asio",
-        "@boost//:filesystem",
+        ":uart_communicator",
     ],
 )
 
@@ -49,5 +45,18 @@ cc_library(
         "//software/geom:angular_velocity",
         "//software/logger",
         "@eigen",
+    ],
+)
+
+cc_library(
+    name = "uart_communicator",
+    srcs = ["uart_communicator.cpp"],
+    hdrs = ["uart_communicator.h"],
+    deps = [
+        "//shared/uart_framing",
+        "//software/logger",
+        "//software/uart:boost_uart_communication",
+        "@boost//:asio",
+        "@boost//:filesystem",
     ],
 )

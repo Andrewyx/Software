@@ -8,9 +8,9 @@ ansible==11.9.0 \
     --hash=sha256:528ca5a408f11cf1fea00daea7570e68d40e167be38b90c119a7cb45729e4921 \
     --hash=sha256:79b087ef38105b93e0e092e7013a0f840e154a6a8ce9b5fddd1b47593adc542a
     # via -r software/embedded/ansible/requirements.in
-ansible-core==2.18.9 \
-    --hash=sha256:25206e1aac3bd30d95649a5ccf0d3646461d02b4dc265b5959e33b7ccd6f23f8 \
-    --hash=sha256:a5f4a02aad5843e990ff7be1b92dd658a8b230de713ea643920e683ebf980da1
+ansible-core==2.18.17 \
+    --hash=sha256:556815258f84a57349b63474479506b2a8431a85661fd3f53a5c11894b7a3f25 \
+    --hash=sha256:ae746d8b76c45cc7ee4123fba1f9ea1e3df2ed36a5d2b7ace7e88205bacc73f9
     # via ansible
 cffi==2.0.0 \
     --hash=sha256:00bdf7acc5f795150faa6957054fbbca2439db2f775ce831222b66f192f03beb \
@@ -339,7 +339,7 @@ resolvelib==1.0.1 \
     # via ansible-core
 
 # The following packages are considered to be unsafe in a requirements file:
-setuptools==82.0.0 \
-    --hash=sha256:22e0a2d69474c6ae4feb01951cb69d515ed23728cf96d05513d36e42b62b37cb \
-    --hash=sha256:70b18734b607bd1da571d097d236cfcfacaf01de45717d59e6e04b96877532e0
+setuptools==82.0.1 \
+    --hash=sha256:7d872682c5d01cfde07da7bccc7b65469d3dca203318515ada1de5eda35efbf9 \
+    --hash=sha256:a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb
     # via colorzero

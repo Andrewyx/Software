@@ -13,10 +13,23 @@ BoostUartCommunication::BoostUartCommunication(int baud_rate,
 
 std::vector<unsigned char> BoostUartCommunication::serialRead(size_t num_read_bytes)
 {
-    std::vector<unsigned char> read_buffer(num_read_bytes);
-
-    boost::asio::read(*serial_port, boost::asio::buffer(read_buffer, num_read_bytes));
-
+    (void)num_read_bytes; // Ignore fixed size, we read a COBS packet
+    std::vector<unsigned char> read_buffer;
+    unsigned char byte;
+    
+    // Read until we see a START byte (0x00)
+    do {
+        boost::asio::read(*serial_port, boost::asio::buffer(&byte, 1));
+    } while (byte != 0x00);
+    
+    read_buffer.push_back(byte); // The start byte
+    
+    // Read until we see the END byte (0x00)
+    do {
+        boost::asio::read(*serial_port, boost::asio::buffer(&byte, 1));
+        read_buffer.push_back(byte);
+    } while (byte != 0x00);
+    
     return read_buffer;
 }
 

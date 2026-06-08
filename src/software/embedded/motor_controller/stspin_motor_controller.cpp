@@ -22,10 +22,12 @@
 using Crc8Autosar = crc_utils::crc<uint8_t, 0x2F, 0xFF, false, false, 0xFF>;
 
 StSpinMotorController::StSpinMotorController(
-    const robot_constants::RobotConstants& robot_constants)
+    const robot_constants::RobotConstants& robot_constants,
+    std::shared_ptr<UartCommunicator> uart)
     : robot_constants_(robot_constants),
       reset_gpio_(std::make_unique<GpioCharDev>(RESET_GPIO_PIN, GpioDirection::OUTPUT,
-                                                GpioState::HIGH))
+                                                GpioState::HIGH)),
+      uart_(uart)
 {
     for (const MotorIndex motor : driveMotors())
     {
@@ -84,7 +86,6 @@ void StSpinMotorController::updateFaults(const MotorIndex motor,
         // No faults
         return;
     }
-
     // TODO #3748 Use a helper, stop regenerating the stream object.
     std::ostringstream oss;
     oss << "======= Faults For Motor " << motor << "=======\n";
@@ -178,7 +179,9 @@ int StSpinMotorController::readThenWriteVelocity(const MotorIndex motor,
 {
     if (motor == MotorIndex::DRIBBLER)
     {
-        return 0;
+        // Here target_velocity is treated as angular velocity with unit RPM
+        uart_->sendDribbleTarget(target_velocity);
+        return motor_status_[motor].speed;
     }
 
     const auto outgoing_frame = SetTargetSpeedFrame{

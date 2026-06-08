@@ -35,6 +35,7 @@ cc_library(
         "//proto/message_translation:tbots_protobuf",
         "//software/embedded:spi_utils",
         "//software/embedded/gpio",
+        "//software/embedded/services:power",
         "//software/logger",
         "//software/physics:euclidean_to_wheel",
         "@cppcrc",
@@ -66,6 +67,7 @@ cc_binary(
     ],
     deps = [
         ":motor_controller",
+        "//software/embedded/services:uart_communicator",
         "//software/logger",
         "//software/logger:network_logger",
         "@boost//:program_options",
