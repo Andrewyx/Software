@@ -73,7 +73,7 @@ def before_upload(source, target, env) -> None:
     time.sleep(0.1)
     set_gpio(RESET_GPIO, PinState.HIGH)
     time.sleep(0.5)
-    set_gpio(BOOT_GPIO, PinState.HIGH)
+    # set_gpio(BOOT_GPIO, PinState.HIGH)  # Keep BOOT LOW during esptool sync so it cannot crash!
 
 
 def after_upload(source, target, env) -> None:

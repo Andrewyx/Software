@@ -184,12 +184,14 @@ int StSpinMotorController::readThenWriteVelocity(const MotorIndex motor,
         return motor_status_[motor].speed;
     }
 
+#ifndef DISABLE_MD
     const auto outgoing_frame = SetTargetSpeedFrame{
         .motor_enabled          = motor_status_.at(motor).enabled,
         .motor_target_speed_rpm = static_cast<int16_t>(target_velocity),
     };
 
     sendAndReceiveFrame(motor, outgoing_frame);
+#endif
 
     return motor_status_.at(motor).speed;
 }

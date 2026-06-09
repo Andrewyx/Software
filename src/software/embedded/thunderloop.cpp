@@ -1,3 +1,5 @@
+#define DISABLE_MD
+
 #include "software/embedded/thunderloop.h"
 
 #include <Tracy.hpp>
@@ -125,7 +127,7 @@ Thunderloop::Thunderloop(const robot_constants::RobotConstants& robot_constants,
     power_service_                         = std::make_unique<PowerService>(uart);
     LOG(INFO)
         << "THUNDERLOOP: Power Service initialized! Next initializing Motor Service";
-
+#ifndef DISABLE_MD
     if constexpr (MOTOR_BOARD == MotorBoard::TRINAMIC)
     {
         motor_service_ = std::make_unique<MotorService>(
@@ -139,7 +141,7 @@ Thunderloop::Thunderloop(const robot_constants::RobotConstants& robot_constants,
     }
     g_motor_service = motor_service_.get();
     motor_service_->setup();
-
+#endif
     LOG(INFO) << "THUNDERLOOP: Motor Service initialized! Next initializing IMU Service";
 
     imu_service_ = std::make_unique<ImuService>();
@@ -350,8 +352,10 @@ void Thunderloop::runLoop()
             }
 
             // Motor Service: execute the motor control command
+#ifndef DISABLE_MD
             motor_status_ = pollMotorService(poll_time, direct_control_.motor_control(),
                                              time_since_prev_iter);
+#endif
             thunderloop_status_.set_motor_service_poll_time_ms(
                 getMilliseconds(poll_time));
 
@@ -364,7 +368,9 @@ void Thunderloop::runLoop()
             robot_status_.set_last_handled_primitive_set(last_handled_primitive_set);
             *(robot_status_.mutable_time_sent())             = time_sent_;
             *(robot_status_.mutable_thunderloop_status())    = thunderloop_status_;
+#ifndef DISABLE_MD
             *(robot_status_.mutable_motor_status())          = motor_status_.value();
+#endif
             *(robot_status_.mutable_power_status())          = power_status_;
             *(robot_status_.mutable_network_status())        = network_status_;
             *(robot_status_.mutable_chipper_kicker_status()) = chipper_kicker_status_;

@@ -101,6 +101,8 @@ genrule(
         chmod +w "$$TARGET_DIR/powerloop_main_workdir/platformio.ini"
         echo "" >> "$$TARGET_DIR/powerloop_main_workdir/platformio.ini"
         echo "extra_scripts = pre:auto_reset.py" >> "$$TARGET_DIR/powerloop_main_workdir/platformio.ini"
+        echo "board_build.flash_mode = dio" >> "$$TARGET_DIR/powerloop_main_workdir/platformio.ini"
+        echo "board_build.f_flash = 40000000L" >> "$$TARGET_DIR/powerloop_main_workdir/platformio.ini"
         tar -C "$$TARGET_DIR" -czhf $@ "powerloop_main_workdir"
     """,
     local = True,

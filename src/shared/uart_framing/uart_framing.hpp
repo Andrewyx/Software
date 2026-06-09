@@ -72,7 +72,14 @@ bool verifyLengthAndCrc(const TbotsProto_PowerFrame& frame)
             return false;
     }
     uint16_t expected_crc = crc16(bytes, static_cast<uint16_t>(frame.length));
-    return frame.crc == expected_crc && frame.length == expected_length;
+    bool success = frame.crc == expected_crc && frame.length == expected_length;
+    if (!success) {
+        std::cerr << "verifyLengthAndCrc failed! frame.length=" << frame.length 
+                  << " expected_length=" << expected_length 
+                  << " frame.crc=" << frame.crc 
+                  << " expected_crc=" << expected_crc << std::endl;
+    }
+    return success;
 }
 
 /**
@@ -212,10 +219,16 @@ bool inline unmarshalUartPacket(const std::vector<uint8_t>& data,
     std::vector<uint8_t> decoded;
     if (!cobsDecoding(data, decoded))
     {
+        std::cerr << "unmarshalUartPacket: cobsDecoding failed. data.size() = " << data.size() << " Raw bytes: ";
+        for(size_t i=0; i<std::min((size_t)10, data.size()); ++i) {
+            std::cerr << std::hex << (int)data[i] << " ";
+        }
+        std::cerr << std::dec << std::endl;
         return false;
     }
     if (decoded.size() > TbotsProto_PowerFrame_size)
     {
+        std::cerr << "unmarshalUartPacket: decoded.size() " << decoded.size() << " > max size " << TbotsProto_PowerFrame_size << std::endl;
         return false;
     }
     frame = TbotsProto_PowerFrame_init_default;
@@ -223,6 +236,7 @@ bool inline unmarshalUartPacket(const std::vector<uint8_t>& data,
         pb_istream_from_buffer(static_cast<uint8_t*>(decoded.data()), decoded.size());
     if (!pb_decode_nullterminated(&stream, TbotsProto_PowerFrame_fields, &frame))
     {
+        std::cerr << "unmarshalUartPacket: pb_decode_nullterminated failed" << std::endl;
         return false;
     }
     return verifyLengthAndCrc(frame);
