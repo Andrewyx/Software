@@ -1,0 +1,53 @@
+load("@rules_python//python:defs.bzl", "py_test")
+load("@sim_to_real_deps//:requirements.bzl", "requirement")
+
+py_test(
+    name = "test_tier1",
+    srcs = ["test_tier1.py", "conftest.py"],
+    data = [
+        "//software/sim_to_real:extract_kinematics_events",
+        "//software/sim_to_real:extract_game_events",
+        "//software/sim_to_real:optuna_physics_tuner",
+        "//software/sim_to_real:optuna_gameplay_tuner",
+        "//software/sim_to_real:auto_tune",
+    ],
+    deps = [
+        requirement("pytest"),
+        "@rules_python//python/runfiles",
+    ],
+    main = "test_tier1.py",
+)
+
+py_test(
+    name = "test_tier2",
+    srcs = ["test_tier2.py", "conftest.py"],
+    data = [
+        "//software/sim_to_real:extract_kinematics_events",
+        "//software/sim_to_real:extract_game_events",
+        "//software/sim_to_real:optuna_physics_tuner",
+        "//software/sim_to_real:optuna_gameplay_tuner",
+        "//software/sim_to_real:auto_tune",
+    ],
+    deps = [
+        requirement("pytest"),
+        "@rules_python//python/runfiles",
+    ],
+    main = "test_tier2.py",
+)
+
+py_test(
+    name = "test_tier3",
+    srcs = ["test_tier3.py", "conftest.py"],
+    data = [
+        "//software/sim_to_real:extract_kinematics_events",
+        "//software/sim_to_real:extract_game_events",
+        "//software/sim_to_real:optuna_physics_tuner",
+        "//software/sim_to_real:optuna_gameplay_tuner",
+        "//software/sim_to_real:auto_tune",
+    ],
+    deps = [
+        requirement("pytest"),
+        "@rules_python//python/runfiles",
+    ],
+    main = "test_tier3.py",
+)

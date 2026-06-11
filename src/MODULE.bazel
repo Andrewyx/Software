@@ -307,3 +307,11 @@ new_local_repository(
 ##############################################
 # Workarounds and Fixes Below (hacks)
 ##############################################
+
+pip.parse(
+    hub_name = "sim_to_real_deps",
+    python_interpreter = "/opt/tbotspython/bin/python",
+    python_version = "3.12",
+    requirements_lock = "//software/sim_to_real:requirements_lock.txt",
+)
+use_repo(pip, "sim_to_real_deps")
