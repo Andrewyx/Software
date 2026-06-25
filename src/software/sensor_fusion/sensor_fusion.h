@@ -68,6 +68,16 @@ class SensorFusion
     // https://github.com/UBC-Thunderbots/Software/issues/3197
     static constexpr double DISTANCE_THRESHOLD_FOR_BREAKBEAM_FAULT_DETECTION = 0.5;
 
+    // Closed-loop velocity feedback (Loop A): weight on a friendly robot's self-reported
+    // (fused) velocity when complementary-filtering it with the vision-differenced
+    // velocity. 1.0 trusts the feedback fully, 0.0 falls back to vision only.
+    static constexpr double FRIENDLY_ROBOT_VELOCITY_FEEDBACK_WEIGHT = 0.75;
+
+    // Number of vision frames a velocity feedback sample stays valid for. If no fresh
+    // feedback arrives within this many frames (robot offline, simulator without
+    // feedback, replay, etc.) we discard it and fall back to vision differencing.
+    static constexpr unsigned int VELOCITY_FEEDBACK_EXPIRY_NUM_FRAMES = 5;
+
    private:
     /**
      * Updates relevant components of world based on a new data
@@ -106,6 +116,15 @@ class SensorFusion
      */
     Team createFriendlyTeam(const std::vector<RobotDetection>& robot_detections);
     Team createEnemyTeam(const std::vector<RobotDetection>& robot_detections);
+
+    /**
+     * Refines each friendly robot's vision-derived velocity by complementary-filtering
+     * it with the robot's latest self-reported velocity feedback (when fresh), and ages
+     * out stale feedback. Robots without fresh feedback keep their vision velocity.
+     *
+     * @param team the vision-derived friendly team to refine in place
+     */
+    void applyVelocityFeedback(Team& team);
 
 
     /**
@@ -199,6 +218,20 @@ class SensorFusion
     std::shared_ptr<PossessionTracker> possession_tracker;
 
     std::optional<RobotId> friendly_robot_id_with_ball_in_dribbler;
+
+    // A friendly robot's latest self-reported kinematic feedback (Loop A), used to
+    // refine the vision-derived velocity in the World.
+    struct RobotVelocityFeedback
+    {
+        // Velocity in the robot's local frame [m/s] (forward = +x, left = +y)
+        Vector local_velocity;
+        // Angular velocity [rad/s]
+        AngularVelocity angular_velocity;
+        // Vision frames remaining before this sample is considered stale and discarded
+        unsigned int frames_until_stale;
+    };
+    // Keyed by friendly robot id
+    std::map<RobotId, RobotVelocityFeedback> friendly_robot_velocity_feedback;
 
     unsigned int friendly_goalie_id;
     unsigned int enemy_goalie_id;

@@ -359,10 +359,12 @@ inline RobotState Thunderloop::updateLocalization()
 
     robot_localizer_.step(linear_acceleration);
 
-    // Hand the fused state estimate to the primitive executor
-    return RobotState(robot_localizer_.getPosition(), robot_localizer_.getVelocity(),
-                      robot_localizer_.getOrientation(),
-                      robot_localizer_.getAngularVelocity());
+    // Hand the fused state estimate to the primitive executor, and cache it so
+    // assembleRobotStatus can loop the velocity estimate back up to the AI.
+    estimated_robot_state_ = RobotState(
+        robot_localizer_.getPosition(), robot_localizer_.getVelocity(),
+        robot_localizer_.getOrientation(), robot_localizer_.getAngularVelocity());
+    return estimated_robot_state_;
 }
 
 inline Thunderloop::PrimitiveStepResult Thunderloop::stepActivePrimitive(
@@ -474,6 +476,16 @@ inline void Thunderloop::assembleRobotStatus(
     *(robot_status_.mutable_network_status())            = network.network_status;
     *(robot_status_.mutable_chipper_kicker_status())     = chicker_status;
     *(robot_status_.mutable_primitive_executor_status()) = primitive.executor_status;
+
+    // Loop the fused velocity estimate back up to the AI. The motor service has already
+    // written motor_status this iteration, so we augment it rather than overwrite it.
+    // Velocity is reported in the robot's local frame so the receiver can re-anchor it
+    // to the absolute vision orientation.
+    TbotsProto::MotorStatus* motor_status = robot_status_.mutable_motor_status();
+    *(motor_status->mutable_fused_local_velocity()) =
+        *createVectorProto(estimated_robot_state_.localVelocity());
+    *(motor_status->mutable_fused_angular_velocity()) =
+        *createAngularVelocityProto(estimated_robot_state_.angularVelocity());
 
     updateErrorCodes();
 }

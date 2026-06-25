@@ -202,6 +202,10 @@ class Thunderloop
     // The outgoing robot status.
     TbotsProto::RobotStatus robot_status_;
 
+    // The latest fused kinematic estimate from the localizer, looped back up the
+    // pipeline via robot_status_ so the AI can seed trajectories from velocity feedback.
+    RobotState estimated_robot_state_;
+
     TbotsProto::ThunderloopStatus thunderloop_status_;
 
     // Current State

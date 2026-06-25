@@ -1,7 +1,9 @@
 #include "software/sensor_fusion/sensor_fusion.h"
 
+#include "proto/message_translation/tbots_geometry.h"
 #include "software/geom/algorithms/distance.h"
 #include "software/logger/logger.h"
+#include "software/physics/velocity_conversion_util.h"
 
 SensorFusion::SensorFusion(TbotsProto::SensorFusionConfig sensor_fusion_config)
     : sensor_fusion_config(sensor_fusion_config),
@@ -195,6 +197,19 @@ void SensorFusion::updateWorld(
             ball_in_dribbler_timeout =
                 sensor_fusion_config.num_dropped_detections_before_ball_not_in_dribbler();
         }
+
+        // Store the robot's fused velocity feedback (Loop A) so the next vision frame can
+        // refine its World velocity. Absent on robots/simulators that don't report it.
+        if (robot_status_msg.has_motor_status() &&
+            robot_status_msg.motor_status().has_fused_local_velocity())
+        {
+            const auto& motor_status                   = robot_status_msg.motor_status();
+            friendly_robot_velocity_feedback[robot_id] = RobotVelocityFeedback{
+                .local_velocity = createVector(motor_status.fused_local_velocity()),
+                .angular_velocity =
+                    createAngularVelocity(motor_status.fused_angular_velocity()),
+                .frames_until_stale = VELOCITY_FEEDBACK_EXPIRY_NUM_FRAMES};
+        }
     }
 }
 
@@ -364,7 +379,60 @@ Team SensorFusion::createFriendlyTeam(const std::vector<RobotDetection>& robot_d
 {
     Team new_friendly_team = friendly_team_filter.getFilteredData(
         friendly_team, robot_detections, friendly_robot_id_with_ball_in_dribbler);
+    applyVelocityFeedback(new_friendly_team);
     return new_friendly_team;
+}
+
+void SensorFusion::applyVelocityFeedback(Team& team)
+{
+    std::vector<Robot> refined_robots;
+    refined_robots.reserve(team.getAllRobots().size());
+
+    for (Robot robot : team.getAllRobots())
+    {
+        auto feedback_it = friendly_robot_velocity_feedback.find(robot.id());
+        if (feedback_it != friendly_robot_velocity_feedback.end() &&
+            feedback_it->second.frames_until_stale > 0)
+        {
+            const RobotVelocityFeedback& feedback = feedback_it->second;
+
+            // The feedback velocity is in the robot's local frame; rotate it into the
+            // world frame using the absolute, drift-free vision orientation rather than
+            // trusting the (potentially drifting) onboard orientation estimate.
+            const Vector feedback_velocity =
+                localToGlobalVelocity(feedback.local_velocity, robot.orientation());
+
+            // Complementary filter: feedback is fast/responsive, vision differencing is
+            // the slow absolute reference.
+            constexpr double w = FRIENDLY_ROBOT_VELOCITY_FEEDBACK_WEIGHT;
+            const Vector blended_velocity =
+                feedback_velocity * w + robot.velocity() * (1.0 - w);
+            const AngularVelocity blended_angular_velocity =
+                feedback.angular_velocity * w + robot.angularVelocity() * (1.0 - w);
+
+            RobotState refined_state = robot.currentState();
+            refined_state.setVelocity(blended_velocity);
+            refined_state.setAngularVelocity(blended_angular_velocity);
+            robot.updateState(refined_state, robot.timestamp());
+        }
+        refined_robots.emplace_back(robot);
+    }
+
+    team.updateRobots(refined_robots);
+
+    // Age out feedback samples by one vision frame, dropping any that have gone stale.
+    for (auto it = friendly_robot_velocity_feedback.begin();
+         it != friendly_robot_velocity_feedback.end();)
+    {
+        if (--(it->second.frames_until_stale) == 0)
+        {
+            it = friendly_robot_velocity_feedback.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }
 
 void SensorFusion::updateDribbleDisplacement()
@@ -517,6 +585,7 @@ void SensorFusion::resetWorldComponents()
     enemy_team_filter    = RobotTeamFilter();
     possession           = TeamPossession::FRIENDLY_TEAM;
     dribble_displacement = std::nullopt;
+    friendly_robot_velocity_feedback.clear();
 }
 
 void SensorFusion::setVirtualObstacles(TbotsProto::VirtualObstacles virtual_obstacles)

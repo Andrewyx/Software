@@ -7,6 +7,7 @@
 #include "proto/message_translation/ssl_wrapper.h"
 #include "proto/message_translation/tbots_protobuf.h"
 #include "proto/parameters.pb.h"
+#include "software/physics/velocity_conversion_util.h"
 
 class SensorFusionTest : public ::testing::Test
 {
@@ -388,6 +389,57 @@ TEST_F(SensorFusionTest,
         robot_unavailable_capabilities.find(RobotCapability::Dribble) !=
         robot_unavailable_capabilities.end();
     ASSERT_TRUE(is_dribble_disabled);
+}
+
+TEST_F(SensorFusionTest, test_velocity_feedback_refines_friendly_robot_velocity)
+{
+    // Loop A: robot 1 reports fused velocity feedback while robot 2 reports none. The
+    // feedback should be complementary-filtered into robot 1's World velocity, while
+    // robot 2 keeps its vision-derived velocity.
+    const Vector feedback_local_velocity(1.0, -0.5);
+    const double feedback_angular_velocity = 0.8;
+
+    SensorProto status_msg;
+    auto* robot_status = status_msg.add_robot_status_msgs();
+    robot_status->set_robot_id(1);
+    auto* motor_status = robot_status->mutable_motor_status();
+    motor_status->mutable_fused_local_velocity()->set_x_component_meters(
+        feedback_local_velocity.x());
+    motor_status->mutable_fused_local_velocity()->set_y_component_meters(
+        feedback_local_velocity.y());
+    motor_status->mutable_fused_angular_velocity()->set_radians_per_second(
+        feedback_angular_velocity);
+
+    // Feedback arrives between vision frames
+    sensor_fusion.processSensorProto(status_msg);
+
+    // The next vision frame builds the World and applies the feedback
+    SensorProto vision_msg;
+    *(vision_msg.mutable_ssl_vision_msg()) =
+        *createSSLWrapperPacket(std::move(geom_data), initDetectionFrame());
+    sensor_fusion.processSensorProto(vision_msg);
+
+    auto world = sensor_fusion.getWorld();
+    ASSERT_TRUE(world);
+
+    // Robot 1: vision velocity is zero on the first frame, so the blended velocity is the
+    // feedback (rotated into the world frame) scaled by the feedback weight.
+    std::optional<Robot> robot1 = world->friendlyTeam().getRobotById(1);
+    ASSERT_TRUE(robot1);
+    const Vector expected_velocity =
+        localToGlobalVelocity(feedback_local_velocity, robot1->orientation()) *
+        SensorFusion::FRIENDLY_ROBOT_VELOCITY_FEEDBACK_WEIGHT;
+    EXPECT_NEAR(expected_velocity.x(), robot1->velocity().x(), 1e-6);
+    EXPECT_NEAR(expected_velocity.y(), robot1->velocity().y(), 1e-6);
+    EXPECT_NEAR(
+        feedback_angular_velocity * SensorFusion::FRIENDLY_ROBOT_VELOCITY_FEEDBACK_WEIGHT,
+        robot1->angularVelocity().toRadians(), 1e-6);
+
+    // Robot 2: no feedback, so it keeps its vision-derived (zero) velocity.
+    std::optional<Robot> robot2 = world->friendlyTeam().getRobotById(2);
+    ASSERT_TRUE(robot2);
+    EXPECT_NEAR(0.0, robot2->velocity().x(), 1e-6);
+    EXPECT_NEAR(0.0, robot2->velocity().y(), 1e-6);
 }
 
 TEST_F(SensorFusionTest, test_making_all_robot_capabilities_unavailable_from_error_code)
