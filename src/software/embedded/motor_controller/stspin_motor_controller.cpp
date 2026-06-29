@@ -42,16 +42,36 @@ void StSpinMotorController::setup()
     {
         motor_status_[motor]         = MotorStatus();
         motor_status_[motor].enabled = true;
+        motor_status_[motor].present = true;
     }
 
     for (const MotorIndex motor : driveMotors())
     {
-        sendAndReceiveMessage(motor,
-                              SetPidSpeedKpKiMessage{.kp = SPEED_PID_PROPORTIONAL_GAIN,
-                                                     .ki = SPEED_PID_INTEGRAL_GAIN});
-        sendAndReceiveMessage(motor,
-                              SetPidTorqueKpKiMessage{.kp = TORQUE_PID_PROPORTIONAL_GAIN,
-                                                      .ki = TORQUE_PID_INTEGRAL_GAIN});
+        // Configure the motor's PID gains. We use whether the board acknowledges
+        // these messages to detect whether it is actually connected: a board that
+        // does not respond to either message is treated as physically absent.
+        const bool acked_speed = sendAndReceiveMessage(
+            motor, SetPidSpeedKpKiMessage{.kp = SPEED_PID_PROPORTIONAL_GAIN,
+                                          .ki = SPEED_PID_INTEGRAL_GAIN});
+        const bool acked_torque = sendAndReceiveMessage(
+            motor, SetPidTorqueKpKiMessage{.kp = TORQUE_PID_PROPORTIONAL_GAIN,
+                                           .ki = TORQUE_PID_INTEGRAL_GAIN});
+
+        const bool present           = acked_speed || acked_torque;
+        motor_status_[motor].present = present;
+
+        if (!present)
+        {
+            // The board did not respond, so treat it as absent: report it as
+            // disabled and skip all further SPI communication with it. This lets
+            // Thunderloop keep driving the remaining motors instead of stalling
+            // on (or crashing because of) the missing board.
+            motor_status_[motor].enabled              = false;
+            motor_status_[motor].faults.drive_enabled = false;
+            LOG(WARNING) << "Motor " << motor
+                         << " did not respond during setup; treating its board as "
+                            "absent and continuing with the remaining motors";
+        }
     }
 }
 
@@ -66,6 +86,11 @@ void StSpinMotorController::reset()
 const MotorFaultIndicator& StSpinMotorController::checkFaults(const MotorIndex motor)
 {
     return motor_status_.at(motor).faults;
+}
+
+bool StSpinMotorController::isMotorAbsent(const MotorIndex motor) const
+{
+    return !motor_status_.at(motor).present;
 }
 
 void StSpinMotorController::updateFaults(const MotorIndex motor,
@@ -181,6 +206,12 @@ int StSpinMotorController::readThenWriteVelocity(const MotorIndex motor,
         return 0;
     }
 
+    if (!motor_status_.at(motor).present)
+    {
+        // Board is absent; skip SPI communication and report zero measured velocity.
+        return 0;
+    }
+
     const auto outgoing_message = SetTargetSpeedMessage{
         .motor_enabled          = motor_status_.at(motor).enabled,
         .motor_target_speed_rpm = static_cast<int16_t>(target_velocity),
@@ -219,7 +250,7 @@ void StSpinMotorController::openSpiFileDescriptor(const MotorIndex motor)
                      << "error: " << strerror(errno);
 }
 
-void StSpinMotorController::sendAndReceiveMessage(const MotorIndex motor,
+bool StSpinMotorController::sendAndReceiveMessage(const MotorIndex motor,
                                                   const OutgoingMessage& outgoing_message)
 {
     std::array<uint8_t, MESSAGE_SIZE> tx{};
@@ -277,7 +308,7 @@ void StSpinMotorController::sendAndReceiveMessage(const MotorIndex motor,
                           message.begin());
                 processRx(motor, message);
 
-                return;
+                return true;
             }
         }
 
@@ -289,6 +320,8 @@ void StSpinMotorController::sendAndReceiveMessage(const MotorIndex motor,
     LOG(WARNING) << "Motor " << motor << " did not acknowledge message (seq_num "
                  << motor_status_.at(motor).seq_num << ") after "
                  << MAX_SPI_TRANSFER_ATTEMPTS << " SPI attempts; giving up";
+
+    return false;
 }
 
 void StSpinMotorController::populateTx(const MotorIndex motor,

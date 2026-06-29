@@ -1,5 +1,8 @@
 #include "software/embedded/services/motor.h"
 
+#include <array>
+#include <utility>
+
 #include "proto/tbots_software_msgs.pb.h"
 #include "software/embedded/motor_controller/motor_board.h"
 #include "software/embedded/motor_controller/stspin_motor_controller.h"
@@ -138,33 +141,30 @@ void MotorService::poll(const TbotsProto::DirectControlPrimitive& primitive,
     TbotsProto::MotorStatus motor_status =
         createMotorStatus(current_wheel_velocities, dribbler_rpm);
 
-    if (std::abs(current_wheel_velocities[FRONT_RIGHT_WHEEL_SPACE_INDEX] -
-                 prev_wheel_velocities_[FRONT_RIGHT_WHEEL_SPACE_INDEX]) >
-        RUNAWAY_PROTECTION_THRESHOLD_MPS)
+    // Runaway protection: if a motor's measured velocity diverges too far from what
+    // we commanded, immediately disable all motors and crash for safety. Absent
+    // boards always read zero velocity, so they are skipped to avoid false positives.
+    constexpr std::array<std::pair<MotorIndex, int>, 4> runaway_checks = {{
+        {MotorIndex::FRONT_RIGHT, FRONT_RIGHT_WHEEL_SPACE_INDEX},
+        {MotorIndex::FRONT_LEFT, FRONT_LEFT_WHEEL_SPACE_INDEX},
+        {MotorIndex::BACK_LEFT, BACK_LEFT_WHEEL_SPACE_INDEX},
+        {MotorIndex::BACK_RIGHT, BACK_RIGHT_WHEEL_SPACE_INDEX},
+    }};
+
+    for (const auto& [motor, wheel_space_index] : runaway_checks)
     {
-        motor_controller_->immediatelyDisable();
-        LOG(FATAL) << "Front right motor runaway";
-    }
-    else if (std::abs(current_wheel_velocities[FRONT_LEFT_WHEEL_SPACE_INDEX] -
-                      prev_wheel_velocities_[FRONT_LEFT_WHEEL_SPACE_INDEX]) >
-             RUNAWAY_PROTECTION_THRESHOLD_MPS)
-    {
-        motor_controller_->immediatelyDisable();
-        LOG(FATAL) << "Front left motor runaway";
-    }
-    else if (std::abs(current_wheel_velocities[BACK_LEFT_WHEEL_SPACE_INDEX] -
-                      prev_wheel_velocities_[BACK_LEFT_WHEEL_SPACE_INDEX]) >
-             RUNAWAY_PROTECTION_THRESHOLD_MPS)
-    {
-        motor_controller_->immediatelyDisable();
-        LOG(FATAL) << "Back left motor runaway";
-    }
-    else if (std::abs(current_wheel_velocities[BACK_RIGHT_WHEEL_SPACE_INDEX] -
-                      prev_wheel_velocities_[BACK_RIGHT_WHEEL_SPACE_INDEX]) >
-             RUNAWAY_PROTECTION_THRESHOLD_MPS)
-    {
-        motor_controller_->immediatelyDisable();
-        LOG(FATAL) << "Back right motor runaway";
+        if (motor_controller_->isMotorAbsent(motor))
+        {
+            continue;
+        }
+
+        if (std::abs(current_wheel_velocities[wheel_space_index] -
+                     prev_wheel_velocities_[wheel_space_index]) >
+            RUNAWAY_PROTECTION_THRESHOLD_MPS)
+        {
+            motor_controller_->immediatelyDisable();
+            LOG(FATAL) << motor << " motor runaway";
+        }
     }
 
     // Convert to Euclidean velocity_delta
@@ -291,5 +291,11 @@ bool MotorService::anyMotorRequiresReset() const
     return std::any_of(reflective_enum::values<MotorIndex>().begin(),
                        reflective_enum::values<MotorIndex>().end(),
                        [&](const MotorIndex motor)
-                       { return motor_controller_->checkFaults(motor).requiresReset(); });
+                       {
+                           // Absent boards are intentionally left disabled, so don't keep
+                           // trying to reset them (which would otherwise trip the
+                           // reset-rate safety crash).
+                           return !motor_controller_->isMotorAbsent(motor) &&
+                                  motor_controller_->checkFaults(motor).requiresReset();
+                       });
 }

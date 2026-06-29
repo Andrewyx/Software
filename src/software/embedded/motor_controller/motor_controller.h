@@ -34,6 +34,22 @@ class MotorController
     virtual const MotorFaultIndicator& checkFaults(MotorIndex motor) = 0;
 
     /**
+     * Returns whether the given motor's controller board is absent, i.e. not
+     * physically connected or otherwise unresponsive.
+     *
+     * Absent motors are skipped during polling (no SPI communication, no fault
+     * resets, no runaway checks) so that Thunderloop can keep driving the
+     * remaining motors instead of stalling on the missing board.
+     *
+     * @param motor the motor to inspect
+     * @return true if the motor's board is absent, false otherwise
+     */
+    virtual bool isMotorAbsent(MotorIndex motor) const
+    {
+        return false;
+    }
+
+    /**
      * Reads the current velocity and writes a new target velocity for a motor.
      *
      * @param motor the motor to command

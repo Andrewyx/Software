@@ -28,6 +28,8 @@ class StSpinMotorController : public MotorController
 
     const MotorFaultIndicator& checkFaults(MotorIndex motor) override;
 
+    bool isMotorAbsent(MotorIndex motor) const override;
+
     int readThenWriteVelocity(MotorIndex motor, int target_velocity) override;
 
     void immediatelyDisable() override;
@@ -83,6 +85,9 @@ class StSpinMotorController : public MotorController
     {
         uint8_t seq_num;
         bool enabled;
+        // Whether the motor's board responded during setup. An absent board is
+        // skipped during polling so the remaining motors can keep running.
+        bool present;
         MotorFaultIndicator faults;
         uint16_t fault_flags;
         int16_t speed;
@@ -112,8 +117,11 @@ class StSpinMotorController : public MotorController
      *
      * @param motor the motor to send the message to
      * @param outgoing_message the outgoing message to send to the motor
+     *
+     * @return true if the motor acknowledged the message, false if it did not
+     * respond after MAX_SPI_TRANSFER_ATTEMPTS attempts
      */
-    void sendAndReceiveMessage(MotorIndex motor, const OutgoingMessage& outgoing_message);
+    bool sendAndReceiveMessage(MotorIndex motor, const OutgoingMessage& outgoing_message);
 
     /**
      * Populates the transmit buffer with the data from an outgoing message.
