@@ -19,7 +19,8 @@
 ErForceSimulator::ErForceSimulator(const TbotsProto::FieldType& field_type,
                                    const robot_constants::RobotConstants& robot_constants,
                                    std::unique_ptr<RealismConfigErForce>& realism_config,
-                                   const bool ramping)
+                                   const bool ramping,
+                                   const bool wheel_acceleration_limits)
     : yellow_team_world_msg(std::make_unique<TbotsProto::World>()),
       blue_team_world_msg(std::make_unique<TbotsProto::World>()),
       frame_number(0),
@@ -28,7 +29,8 @@ ErForceSimulator::ErForceSimulator(const TbotsProto::FieldType& field_type,
       field(Field::createField(field_type)),
       blue_robot_with_ball(std::nullopt),
       yellow_robot_with_ball(std::nullopt),
-      ramping(ramping)
+      ramping(ramping),
+      wheel_acceleration_limits(wheel_acceleration_limits)
 {
     std::string full_filename = CONFIG_DIRECTORY;
 
@@ -94,8 +96,13 @@ std::unique_ptr<RealismConfigErForce> ErForceSimulator::createDefaultRealismConf
     realism_config->set_missing_ball_detections(0);
     realism_config->set_vision_delay(0);
     realism_config->set_vision_processing_time(0);
-    realism_config->set_missing_ball_detections(0);
     realism_config->set_simulate_dribbling(false);
+    realism_config->set_object_position_offset(0);
+    realism_config->set_missing_robot_detections(0);
+    realism_config->set_command_delay(0);
+    realism_config->set_robot_rotation_error(0);
+    realism_config->set_rotated_robot_detections_start(0);
+    realism_config->set_rotated_robot_detections_stop(0);
     return realism_config;
 }
 
@@ -116,11 +123,20 @@ std::unique_ptr<RealismConfigErForce> ErForceSimulator::createRealisticRealismCo
     realism_config->set_camera_position_error(0.1f);
     realism_config->set_robot_command_loss(0.03f);
     realism_config->set_robot_response_loss(0.1f);
-    realism_config->set_missing_ball_detections(0.05f);
+    // Upstream uses 0.05 here, but this config used to set the field twice and the
+    // second value won, so 0.02 is what this has actually been doing all along
+    realism_config->set_missing_ball_detections(0.02f);
     realism_config->set_vision_delay(35000000);
     realism_config->set_vision_processing_time(10000000);
-    realism_config->set_missing_ball_detections(0.02f);
+    // Upstream simulates dribbling here, but our simulated tests rely on the perfect
+    // dribbler, so we keep gluing the ball to the dribbler
     realism_config->set_simulate_dribbling(false);
+    realism_config->set_object_position_offset(0.02f);
+    realism_config->set_missing_robot_detections(0.02f);
+    realism_config->set_command_delay(3000000);
+    realism_config->set_robot_rotation_error(0.5f);
+    realism_config->set_rotated_robot_detections_start(0.001f);
+    realism_config->set_rotated_robot_detections_stop(0.3f);
     return realism_config;
 }
 
@@ -194,6 +210,7 @@ void ErForceSimulator::setRobots(
 
     robot::Specs ERForce;
     robotSetDefault(&ERForce);
+    addSimulationLimits(ERForce);
 
     // Initialize Team Robots at the bottom of the field
     ::robot::Team* team;
@@ -290,6 +307,35 @@ void ErForceSimulator::setRobots(
                 std::make_shared<PrimitiveExecutor>(robot_constants, id);
             yellow_primitive_executor_map.insert({id, robot_primitive_executor});
         }
+    }
+}
+
+void ErForceSimulator::addSimulationLimits(robot::Specs& specs) const
+{
+    if (!wheel_acceleration_limits)
+    {
+        return;
+    }
+
+    auto* limits = specs.mutable_simulation_limits();
+    limits->set_a_speedup_wheel_max(robot_constants.motor_max_acceleration_m_per_s_2);
+    limits->set_a_brake_wheel_max(robot_constants.motor_max_acceleration_m_per_s_2);
+
+    // The simulator expects the coupling matrix in its own local frame, whose first
+    // axis points to the right of the robot and whose second axis points forwards,
+    // while ours has the first axis pointing forwards and the second one to the left.
+    const WheelSpace_t forward_column =
+        euclidean_to_four_wheel.getWheelVelocity(EuclideanSpace_t{1, 0, 0});
+    const WheelSpace_t left_column =
+        euclidean_to_four_wheel.getWheelVelocity(EuclideanSpace_t{0, 1, 0});
+    const WheelSpace_t angular_column =
+        euclidean_to_four_wheel.getWheelVelocity(EuclideanSpace_t{0, 0, 1});
+
+    for (Eigen::Index wheel = 0; wheel < forward_column.size(); wheel++)
+    {
+        limits->add_wheel_velocity_coupling(static_cast<float>(-left_column[wheel]));
+        limits->add_wheel_velocity_coupling(static_cast<float>(forward_column[wheel]));
+        limits->add_wheel_velocity_coupling(static_cast<float>(angular_column[wheel]));
     }
 }
 

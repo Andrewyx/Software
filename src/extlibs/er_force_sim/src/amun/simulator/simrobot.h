@@ -21,7 +21,11 @@
 #ifndef SIMROBOT_H
 #define SIMROBOT_H
 
+#include <BulletDynamics/ConstraintSolver/btGeneric6DofSpring2Constraint.h>
 #include <btBulletDynamicsCommon.h>
+
+#include <Eigen/Dense>
+#include <Eigen/QR>
 
 #include "extlibs/er_force_sim/src/core/rng.h"
 #include "extlibs/er_force_sim/src/protobuf/command.pb.h"
@@ -81,6 +85,17 @@ class camun::simulator::SimRobot
 
     void stopDribbling();
 
+    /**
+     * Sets how much the robot deviates from driving straight, as a fraction of its
+     * forward acceleration that is applied as rotational acceleration
+     *
+     * @param error the rotation error
+     */
+    void setRotationError(float error)
+    {
+        m_rotationError = error;
+    }
+
     const robot::Specs& specs() const
     {
         return m_specs;
@@ -103,6 +118,28 @@ class camun::simulator::SimRobot
                                const btVector3 linVel, float omega);
     void dribble(const SimBall& ball, float speed);
 
+    /**
+     * Builds the matrix that maps the robot's local velocity to the speed of each of
+     * its wheels, and its inverse, from the robot's simulation limits
+     */
+    void generateVelocityCoupling();
+
+    /**
+     * Limits the given acceleration so that no single wheel accelerates faster than
+     * the robot's simulation limits allow
+     *
+     * @param a_f the forward acceleration
+     * @param a_s the sideways acceleration
+     * @param a_phi the rotational acceleration
+     * @param v_f the current forward velocity
+     * @param v_s the current sideways velocity
+     * @param omega the current rotational velocity
+     *
+     * @return the bounded {a_s, a_f, a_phi}
+     */
+    Eigen::Vector3f limitAcceleration(float a_f, float a_s, float a_phi, float v_f,
+                                      float v_s, float omega) const;
+
     RNG m_rng;
     robot::Specs m_specs;
     std::shared_ptr<btDiscreteDynamicsWorld> m_world;
@@ -111,7 +148,9 @@ class camun::simulator::SimRobot
     std::unique_ptr<btHingeConstraint> m_dribblerConstraint;
     std::vector<std::unique_ptr<btCollisionShape>> m_shapes;
     std::unique_ptr<btMotionState> m_motionState;
-    std::unique_ptr<btHingeConstraint> m_holdBallConstraint;
+    std::unique_ptr<btPoint2PointConstraint> m_holdBallConstraint;
+    // Keeps a robot that is holding the ball from tipping over, see dribble()
+    std::unique_ptr<btGeneric6DofSpring2Constraint> m_notTipOverConstraint;
     btVector3 m_dribblerCenter;
 
     sslsim::TeleportRobot m_move;
@@ -127,6 +166,13 @@ class camun::simulator::SimRobot
     float m_error_sum_omega;
 
     bool m_perfectDribbler = false;
+    float m_rotationError  = 0.0f;
+
+    // Whether this robot limits the acceleration of each of its wheels individually,
+    // rather than just its acceleration as a whole
+    bool m_limitWheelAcceleration = false;
+    Eigen::Matrix<float, 4, 3> m_velocityCoupling;
+    Eigen::CompleteOrthogonalDecomposition<Eigen::Matrix<float, 4, 3>> m_inverseCoupling;
 
     int64_t m_lastSendTime = 0;
 };

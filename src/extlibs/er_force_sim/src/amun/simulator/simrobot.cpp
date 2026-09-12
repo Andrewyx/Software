@@ -128,6 +128,8 @@ SimRobot::SimRobot(const robot::Specs& specs,
 
     m_shapes.push_back(std::move(wholeShape));
     m_shapes.push_back(std::move(dribblerShape));
+
+    generateVelocityCoupling();
 }
 
 SimRobot::~SimRobot()
@@ -135,6 +137,7 @@ SimRobot::~SimRobot()
     if (m_holdBallConstraint)
     {
         m_world->removeConstraint(m_holdBallConstraint.get());
+        m_world->removeConstraint(m_notTipOverConstraint.get());
     }
     m_world->removeConstraint(m_dribblerConstraint.get());
     m_world->removeRigidBody(m_dribblerBody.get());
@@ -164,18 +167,29 @@ void SimRobot::dribble(const SimBall& ball, float speed)
     {
         if (canKickBall(ball) && !m_holdBallConstraint)
         {
-            btTransform localA, localB;
-            localA.setIdentity();
-            localB.setIdentity();
+            const btTransform robotWorldTransform = m_body->getWorldTransform();
+            const btTransform worldToRobot        = robotWorldTransform.inverse();
 
-            auto worldToRobot = m_body->getWorldTransform().inverse();
-            localA.setOrigin(worldToRobot * ball.position());
-            localA.setRotation(btQuaternion(worldToRobot * btVector3(0, 1, 0), M_PI_2));
-            localB.setRotation(btQuaternion(worldToRobot * btVector3(0, 1, 0), M_PI_2));
+            const btVector3 localA = worldToRobot * ball.position();
+            const btVector3 localB(0, 0, 0);
 
-            m_holdBallConstraint = std::make_unique<btHingeConstraint>(
+            m_holdBallConstraint = std::make_unique<btPoint2PointConstraint>(
                 *m_body, *ball.body(), localA, localB);
             m_world->addConstraint(m_holdBallConstraint.get(), true);
+
+            // Add a constraint that keeps the robot from tipping over. Without it,
+            // two robots duelling for the ball regularly flipped each other over, and
+            // a flipped robot is teleported off to the side by resetFlipped.
+            // This is an ugly hack, but then again so is the hold ball constraint.
+            // Note that in bullet a lower limit greater than the upper limit means
+            // that the axis is free, so only the x and y rotations are locked here.
+            m_notTipOverConstraint = std::make_unique<btGeneric6DofSpring2Constraint>(
+                *m_body, robotWorldTransform);
+            m_notTipOverConstraint->setAngularLowerLimit(btVector3(0, 0, 1));
+            m_notTipOverConstraint->setAngularUpperLimit(btVector3(0, 0, 0));
+            m_notTipOverConstraint->setLinearLowerLimit(btVector3(1, 1, 1));
+            m_notTipOverConstraint->setLinearUpperLimit(btVector3(0, 0, 0));
+            m_world->addConstraint(m_notTipOverConstraint.get(), true);
         }
     }
     else
@@ -197,7 +211,9 @@ void SimRobot::stopDribbling()
     if (m_holdBallConstraint)
     {
         m_world->removeConstraint(m_holdBallConstraint.get());
+        m_world->removeConstraint(m_notTipOverConstraint.get());
         m_holdBallConstraint.reset();
+        m_notTipOverConstraint.reset();
     }
 }
 
@@ -492,16 +508,11 @@ void SimRobot::begin(SimBall& ball, double time)
     // as a certain part of the acceleration is required to compensate damping,
     // the robot will run into a speed limit! bound acceleration the speed limit
     // is acceleration * accelScale / V
-    float a_f = V * v_f + K * error_v_f + K_I * m_error_sum_v_f;
-    float a_s = V * v_s + K * error_v_s + K_I * m_error_sum_v_s;
+    const float a_f = V * v_f + K * error_v_f + K_I * m_error_sum_v_f;
+    const float a_s = V * v_s + K * error_v_s + K_I * m_error_sum_v_s;
 
     const float accelScale =
         2.f;  // let robot accelerate / brake faster than the accelerator does
-    a_f = bound(a_f, v_f, accelScale * m_specs.strategy().a_speedup_f_max(),
-                accelScale * m_specs.strategy().a_brake_f_max());
-    a_s = bound(a_s, v_s, accelScale * m_specs.strategy().a_speedup_s_max(),
-                accelScale * m_specs.strategy().a_brake_s_max());
-    const btVector3 force(a_s * m_specs.mass(), a_f * m_specs.mass(), 0);
 
     // localInertia.z() / SIMULATOR_SCALE^2 \approx
     // 1/12*mass*(robot_width^2+robot_depth^2)
@@ -513,9 +524,34 @@ void SimRobot::begin(SimBall& ball, double time)
     const float K_I_phi = /*0*0.2/1000; //*/ 0.f;
 
     const float a_phi = V_phi * omega + K_phi * error_omega + K_I_phi * m_error_sum_omega;
-    const float a_phi_bound =
-        bound(a_phi, omega, accelScale * m_specs.strategy().a_speedup_phi_max(),
-              accelScale * m_specs.strategy().a_brake_phi_max());
+
+    // A real robot does not drive perfectly straight; simulate that by turning part of
+    // the forward acceleration into rotational acceleration
+    const float a_phi_with_error = a_phi + m_rotationError * a_f;
+
+    float a_f_bound, a_s_bound, a_phi_bound;
+    if (m_limitWheelAcceleration)
+    {
+        // Limit the acceleration of every wheel individually, which for example makes
+        // the robot accelerate slower diagonally than straight ahead
+        const Eigen::Vector3f limited =
+            limitAcceleration(a_f, a_s, a_phi_with_error, v_f, v_s, omega);
+        a_s_bound   = limited[0];
+        a_f_bound   = limited[1];
+        a_phi_bound = limited[2];
+    }
+    else
+    {
+        a_f_bound   = bound(a_f, v_f, accelScale * m_specs.strategy().a_speedup_f_max(),
+                            accelScale * m_specs.strategy().a_brake_f_max());
+        a_s_bound   = bound(a_s, v_s, accelScale * m_specs.strategy().a_speedup_s_max(),
+                            accelScale * m_specs.strategy().a_brake_s_max());
+        a_phi_bound = bound(a_phi_with_error, omega,
+                            accelScale * m_specs.strategy().a_speedup_phi_max(),
+                            accelScale * m_specs.strategy().a_brake_phi_max());
+    }
+
+    const btVector3 force(a_s_bound * m_specs.mass(), a_f_bound * m_specs.mass(), 0);
     const btVector3 torque(0, 0, a_phi_bound * 0.007884f);
 
     if (force.length2() > 0 || torque.length2() > 0)
@@ -524,6 +560,49 @@ void SimRobot::begin(SimBall& ball, double time)
         m_body->applyCentralForce(t * force * SIMULATOR_SCALE);
         m_body->applyTorque(torque * SIMULATOR_SCALE * SIMULATOR_SCALE);
     }
+}
+
+void SimRobot::generateVelocityCoupling()
+{
+    const auto& limits = m_specs.simulation_limits();
+    if (limits.wheel_velocity_coupling_size() !=
+        m_velocityCoupling.rows() * m_velocityCoupling.cols())
+    {
+        m_limitWheelAcceleration = false;
+        return;
+    }
+
+    for (int row = 0; row < m_velocityCoupling.rows(); row++)
+    {
+        for (int col = 0; col < m_velocityCoupling.cols(); col++)
+        {
+            m_velocityCoupling(row, col) =
+                limits.wheel_velocity_coupling(row * m_velocityCoupling.cols() + col);
+        }
+    }
+
+    m_inverseCoupling        = m_velocityCoupling.completeOrthogonalDecomposition();
+    m_limitWheelAcceleration = true;
+}
+
+Eigen::Vector3f SimRobot::limitAcceleration(float a_f, float a_s, float a_phi, float v_f,
+                                            float v_s, float omega) const
+{
+    const float wheelAccel = m_specs.simulation_limits().a_speedup_wheel_max();
+    const float wheelDecel = m_specs.simulation_limits().a_brake_wheel_max();
+
+    const Eigen::Vector3f speed{v_s, v_f, omega};
+    const Eigen::Vector4f wheelSpeed = m_velocityCoupling * speed;
+
+    const Eigen::Vector3f acceleration{a_s, a_f, a_phi};
+    Eigen::Vector4f limitedWheelAcceleration = m_velocityCoupling * acceleration;
+    for (int i = 0; i < limitedWheelAcceleration.size(); i++)
+    {
+        limitedWheelAcceleration[i] =
+            bound(limitedWheelAcceleration[i], wheelSpeed[i], wheelAccel, wheelDecel);
+    }
+
+    return m_inverseCoupling.solve(limitedWheelAcceleration);
 }
 
 // copy-paste from accelerator
@@ -705,10 +784,10 @@ void SimRobot::update(world::SimRobot& robot, const SimBall& ball) const
 
     const btQuaternion q = transform.getRotation();
     auto* rotation       = robot.mutable_rotation();
-    rotation->set_real(q.getX());
-    rotation->set_i(q.getY());
-    rotation->set_j(q.getZ());
-    rotation->set_k(q.getW());
+    rotation->set_i(q.getX());
+    rotation->set_j(q.getY());
+    rotation->set_k(q.getZ());
+    rotation->set_real(q.getW());
 
     // Get robot orientation relative to the Z axis
     float x = 0;
@@ -750,8 +829,8 @@ void SimRobot::restoreState(const world::SimRobot& robot)
 {
     btVector3 position(robot.p_x(), robot.p_y(), robot.p_z());
     m_body->getWorldTransform().setOrigin(position * SIMULATOR_SCALE);
-    btQuaternion rotation(robot.rotation().real(), robot.rotation().i(),
-                          robot.rotation().j(), robot.rotation().k());
+    btQuaternion rotation(robot.rotation().i(), robot.rotation().j(),
+                          robot.rotation().k(), robot.rotation().real());
     m_body->getWorldTransform().setRotation(rotation);
     btVector3 velocity(robot.v_x(), robot.v_y(), robot.v_z());
     m_body->setLinearVelocity(velocity * SIMULATOR_SCALE);

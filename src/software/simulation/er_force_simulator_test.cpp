@@ -5,6 +5,7 @@
 #include "proto/message_translation/er_force_world.h"
 #include "proto/message_translation/tbots_protobuf.h"
 #include "proto/primitive/primitive_msg_factory.h"
+#include "shared/constants.h"
 #include "shared/robot_constants.h"
 #include "software/geom/vector.h"
 #include "software/physics/euclidean_to_wheel.h"
@@ -453,4 +454,327 @@ TEST_F(ErForceSimulatorRampingTest, ramps_in_motor_service_frame_when_clipping)
             time_to_ramp.toSeconds()));
 
     EXPECT_GT(std::abs(rotated_ramped[1] - expected[0]), 1e-3);
+}
+
+TEST_F(ErForceSimulatorTest, robots_duelling_over_the_ball_stay_upright)
+{
+    // Two robots drive into the ball from opposite sides with their dribblers running.
+    // The perfect dribbler holds the ball with a constraint between the robot and the
+    // ball, which used to tip the robots over when two of them pulled on the same ball.
+    // A tipped over robot is considered flipped and gets teleported to the side of the
+    // field by Simulator::resetFlipped.
+    constexpr double DISTANCE_FROM_BALL_METERS     = 0.11;
+    constexpr double DRIVE_SPEED_METERS_PER_SECOND = 1.0;
+
+    simulator->setBallState(BallState(Point(0, 0), Vector(0, 0)));
+    simulator->setYellowRobots({RobotStateWithId{
+        .id          = 0,
+        .robot_state = RobotState(Point(DISTANCE_FROM_BALL_METERS, 0), Vector(0, 0),
+                                  Angle::half(), AngularVelocity::zero())}});
+    simulator->setBlueRobots({RobotStateWithId{
+        .id          = 0,
+        .robot_state = RobotState(Point(-DISTANCE_FROM_BALL_METERS, 0), Vector(0, 0),
+                                  Angle::zero(), AngularVelocity::zero())}});
+
+    // Both robots drive forwards, towards each other and the ball, while dribbling
+    TbotsProto::PrimitiveSet primitive_set;
+    (*primitive_set.mutable_robot_primitives())[0] = *createDirectControlPrimitive(
+        Vector(DRIVE_SPEED_METERS_PER_SECOND, 0), AngularVelocity::zero(),
+        robot_constants.indefinite_dribbler_speed_rpm, TbotsProto::AutoChipOrKick());
+
+    for (unsigned int step = 0; step < 400; step++)
+    {
+        simulator->setYellowRobotPrimitiveSet(primitive_set,
+                                              std::make_unique<TbotsProto::World>());
+        simulator->setBlueRobotPrimitiveSet(primitive_set,
+                                            std::make_unique<TbotsProto::World>());
+        simulator->stepSimulation(Duration::fromMilliseconds(5));
+    }
+
+    auto sim_state = simulator->getSimulatorState();
+    ASSERT_EQ(1, sim_state.yellow_robots_size());
+    ASSERT_EQ(1, sim_state.blue_robots_size());
+
+    for (const auto& robot : {sim_state.yellow_robots(0), sim_state.blue_robots(0)})
+    {
+        // The z component of the robot's local z axis in world coordinates. It is 1 when
+        // the robot stands flat on the field and decreases as the robot tips over.
+        const double i                 = robot.rotation().i();
+        const double j                 = robot.rotation().j();
+        const double upright_component = 1.0 - 2.0 * (i * i + j * j);
+
+        EXPECT_GT(upright_component, std::cos(Angle::fromDegrees(10).toRadians()))
+            << "Robot tipped over while duelling for the ball";
+
+        // A robot that stays upright also stays within the width of the field, rather
+        // than being teleported to the side by resetFlipped
+        EXPECT_LT(std::abs(robot.p_y()), simulator->getField().yLength() / 2);
+    }
+}
+
+TEST_F(ErForceSimulatorTest, simulator_state_rotation_matches_robot_orientation)
+{
+    const Angle orientation = Angle::fromRadians(0.7);
+
+    simulator->setYellowRobots({RobotStateWithId{
+        .id          = 0,
+        .robot_state = RobotState(Point(0, 0), Vector(0, 0), orientation,
+                                  AngularVelocity::zero())}});
+    simulator->stepSimulation(Duration::fromMilliseconds(5));
+
+    auto sim_state = simulator->getSimulatorState();
+    ASSERT_EQ(1, sim_state.yellow_robots_size());
+    const auto& rotation = sim_state.yellow_robots(0).rotation();
+
+    // A robot standing on the field is only rotated about the z axis, so the rotation
+    // quaternion is (i, j, k, real) = (0, 0, sin(angle / 2), cos(angle / 2))
+    EXPECT_NEAR(rotation.i(), 0.0, 1e-3);
+    EXPECT_NEAR(rotation.j(), 0.0, 1e-3);
+    EXPECT_TRUE(TestUtil::equalWithinTolerance(
+        Angle::fromRadians(2 * std::atan2(rotation.k(), rotation.real())), orientation,
+        Angle::fromDegrees(1)));
+}
+
+class ErForceSimulatorRealismTest : public ::testing::Test
+{
+   protected:
+    // Creates a simulator whose realism config is the default one, with the given
+    // modification applied
+    void createSimulator(
+        const std::function<void(RealismConfigErForce&)>& configure_realism)
+    {
+        auto realism_config = ErForceSimulator::createDefaultRealismConfig();
+        configure_realism(*realism_config);
+        simulator = std::make_shared<ErForceSimulator>(TbotsProto::FieldType::DIV_B,
+                                                       robot_constants, realism_config);
+        simulator->resetCurrentTime();
+    }
+
+    // Adds a single stationary yellow robot at the center of the field
+    void addYellowRobot()
+    {
+        simulator->setYellowRobots({RobotStateWithId{
+            .id          = 0,
+            .robot_state = RobotState(Point(0, 0), Vector(0, 0), Angle::zero(),
+                                      AngularVelocity::zero())}});
+    }
+
+    // Returns all yellow robot detections across all cameras of the latest packets
+    std::vector<SSLProto::SSL_DetectionRobot> getYellowDetections()
+    {
+        std::vector<SSLProto::SSL_DetectionRobot> detections;
+        for (const auto& packet : simulator->getSSLWrapperPackets())
+        {
+            for (const auto& robot : packet.detection().robots_yellow())
+            {
+                detections.push_back(robot);
+            }
+        }
+        return detections;
+    }
+
+    std::shared_ptr<ErForceSimulator> simulator;
+    robot_constants::RobotConstants robot_constants =
+        robot_constants::createRobotConstants();
+};
+
+TEST_F(ErForceSimulatorRealismTest, robots_are_always_detected_by_default)
+{
+    createSimulator([](RealismConfigErForce&) {});
+    addYellowRobot();
+    simulator->stepSimulation(Duration::fromMilliseconds(5));
+
+    EXPECT_FALSE(getYellowDetections().empty());
+}
+
+TEST_F(ErForceSimulatorRealismTest, robots_are_never_detected_when_always_missing)
+{
+    createSimulator([](RealismConfigErForce& realism)
+                    { realism.set_missing_robot_detections(1.0f); });
+    addYellowRobot();
+    simulator->stepSimulation(Duration::fromMilliseconds(5));
+
+    EXPECT_TRUE(getYellowDetections().empty());
+}
+
+TEST_F(ErForceSimulatorRealismTest, rotated_robot_detections_are_reported_on_top)
+{
+    createSimulator(
+        [](RealismConfigErForce& realism)
+        {
+            realism.set_rotated_robot_detections_start(1.0f);
+            realism.set_rotated_robot_detections_stop(0.0f);
+        });
+    addYellowRobot();
+    simulator->stepSimulation(Duration::fromMilliseconds(5));
+
+    auto detections = getYellowDetections();
+    ASSERT_EQ(2, detections.size());
+
+    // The robot is reported once with its own id and once with the id of the pattern
+    // that its own pattern turns into when rotated by 90 degrees
+    EXPECT_EQ(0, detections[0].robot_id());
+    EXPECT_NE(detections[0].robot_id(), detections[1].robot_id());
+    EXPECT_NEAR(detections[1].x(), detections[0].x(), 1e-3);
+    EXPECT_NEAR(detections[1].y(), detections[0].y(), 1e-3);
+    EXPECT_NEAR(detections[1].orientation(), detections[0].orientation() + M_PI_2, 1e-3);
+}
+
+TEST_F(ErForceSimulatorRealismTest, commands_are_only_applied_after_the_command_delay)
+{
+    constexpr double COMMAND_DELAY_SECONDS         = 0.1;
+    constexpr double DRIVE_SPEED_METERS_PER_SECOND = 1.0;
+
+    TbotsProto::PrimitiveSet primitive_set;
+    (*primitive_set.mutable_robot_primitives())[0] = *createDirectControlPrimitive(
+        Vector(DRIVE_SPEED_METERS_PER_SECOND, 0), AngularVelocity::zero(),
+        /*dribbler_rpm=*/0, TbotsProto::AutoChipOrKick());
+
+    // Drives the robot forwards for the given duration and returns its forward velocity
+    const auto driveFor = [&](const Duration& duration)
+    {
+        for (unsigned int step = 0; step * 5 < duration.toMilliseconds(); step++)
+        {
+            simulator->setYellowRobotPrimitiveSet(primitive_set,
+                                                  std::make_unique<TbotsProto::World>());
+            simulator->stepSimulation(Duration::fromMilliseconds(5));
+        }
+        return simulator->getSimulatorState().yellow_robots(0).v_x();
+    };
+
+    // Without a command delay the robot starts driving right away
+    createSimulator([](RealismConfigErForce&) {});
+    addYellowRobot();
+    const double velocity_without_delay =
+        driveFor(Duration::fromSeconds(COMMAND_DELAY_SECONDS / 2));
+    EXPECT_GT(velocity_without_delay, 0.05);
+
+    // With a command delay the robot has not received anything yet at the same point in
+    // time, so it only drifts by the tiny amount it takes to settle onto the field
+    createSimulator(
+        [](RealismConfigErForce& realism)
+        {
+            realism.set_command_delay(
+                static_cast<int64_t>(COMMAND_DELAY_SECONDS * NANOSECONDS_PER_SECOND));
+        });
+    addYellowRobot();
+    EXPECT_NEAR(driveFor(Duration::fromSeconds(COMMAND_DELAY_SECONDS / 2)), 0.0, 0.01);
+
+    // Once the delay has passed, the robot drives just like it does without a delay
+    EXPECT_GT(driveFor(Duration::fromSeconds(1.0)), 0.1);
+}
+
+TEST_F(ErForceSimulatorTest, corner_blocks_keep_the_ball_out_of_the_field_corners)
+{
+    // The corners of the field are blocked off by triangular blocks, so a ball rolling
+    // into a corner is deflected by them instead of coming to rest in the corner itself
+    constexpr double CORNER_BLOCK_CATHETUS_METERS = 0.09;
+
+    const double corner_x =
+        simulator->getField().xLength() / 2 + simulator->getField().boundaryMargin();
+    const double corner_y =
+        simulator->getField().yLength() / 2 + simulator->getField().boundaryMargin();
+
+    simulator->setBallState(BallState(Point(3.9, 2.4), Vector(2.5, 2.5)));
+
+    // How far the ball gets into the corner, measured as the distance from the corner
+    // along both axes summed up. The block face runs diagonally across the corner, so
+    // this value cannot get below the length of its cathetus while the block is there.
+    double closest_approach_to_corner = std::numeric_limits<double>::max();
+    for (unsigned int step = 0; step < 400; step++)
+    {
+        simulator->stepSimulation(Duration::fromMilliseconds(5));
+
+        for (const auto& packet : simulator->getSSLWrapperPackets())
+        {
+            for (const auto& ball : packet.detection().balls())
+            {
+                const double x = std::abs(ball.x() * METERS_PER_MILLIMETER);
+                const double y = std::abs(ball.y() * METERS_PER_MILLIMETER);
+                closest_approach_to_corner =
+                    std::min(closest_approach_to_corner, (corner_x - x) + (corner_y - y));
+            }
+        }
+    }
+
+    // Without the corner block the ball rolls right up into the corner, where it only
+    // keeps its own radius of distance from each of the two walls
+    EXPECT_GT(closest_approach_to_corner, CORNER_BLOCK_CATHETUS_METERS * 0.75);
+}
+
+class ErForceSimulatorWheelLimitTest : public ::testing::Test
+{
+   protected:
+    // Creates a simulator with a single yellow robot at the center of the field, either
+    // with or without per wheel acceleration limits
+    void createSimulator(bool wheel_acceleration_limits)
+    {
+        auto realism_config = ErForceSimulator::createDefaultRealismConfig();
+        simulator           = std::make_shared<ErForceSimulator>(
+            TbotsProto::FieldType::DIV_B, robot_constants, realism_config,
+            /*ramping=*/false, wheel_acceleration_limits);
+        simulator->resetCurrentTime();
+        simulator->setYellowRobots({RobotStateWithId{
+            .id          = 0,
+            .robot_state = RobotState(Point(0, 0), Vector(0, 0), Angle::zero(),
+                                      AngularVelocity::zero())}});
+    }
+
+    // Drives the robot with the given local velocity command and returns the speed it
+    // reaches after a short time
+    double reachedSpeed(const Vector& velocity, const AngularVelocity& angular_velocity)
+    {
+        TbotsProto::PrimitiveSet primitive_set;
+        (*primitive_set.mutable_robot_primitives())[0] = *createDirectControlPrimitive(
+            velocity, angular_velocity, /*dribbler_rpm=*/0, TbotsProto::AutoChipOrKick());
+        for (unsigned int step = 0; step < 10; step++)
+        {
+            simulator->setYellowRobotPrimitiveSet(primitive_set,
+                                                  std::make_unique<TbotsProto::World>());
+            simulator->stepSimulation(Duration::fromMilliseconds(5));
+        }
+
+        const auto& robot = simulator->getSimulatorState().yellow_robots(0);
+        return Vector(robot.v_x(), robot.v_y()).length();
+    }
+
+    std::shared_ptr<ErForceSimulator> simulator;
+    robot_constants::RobotConstants robot_constants =
+        robot_constants::createRobotConstants();
+};
+
+TEST_F(ErForceSimulatorWheelLimitTest, robots_accelerate_as_before_when_limits_are_off)
+{
+    const Vector target_velocity(2.0, 0);
+
+    createSimulator(/*wheel_acceleration_limits=*/false);
+    const double speed_without_limits =
+        reachedSpeed(target_velocity, AngularVelocity::zero());
+
+    createSimulator(/*wheel_acceleration_limits=*/true);
+    const double speed_with_limits =
+        reachedSpeed(target_velocity, AngularVelocity::zero());
+
+    // Driving straight ahead the wheels of our robots are the limiting factor well
+    // before the robot as a whole is, so the limits slow the robot down
+    EXPECT_GT(speed_without_limits, 0.1);
+    EXPECT_LT(speed_with_limits, speed_without_limits);
+}
+
+TEST_F(ErForceSimulatorWheelLimitTest, acceleration_depends_on_the_driving_direction)
+{
+    // Driving diagonally puts more of the load on a single wheel than driving straight
+    // ahead does, so a robot whose wheels limit its acceleration reaches a lower speed
+    // in the same time, even though both commands ask for the same speed
+    constexpr double TARGET_SPEED_METERS_PER_SECOND = 2.0;
+    const Vector straight(TARGET_SPEED_METERS_PER_SECOND, 0);
+    const Vector diagonal = straight.rotate(Angle::fromDegrees(45));
+
+    createSimulator(/*wheel_acceleration_limits=*/true);
+    const double straight_speed = reachedSpeed(straight, AngularVelocity::zero());
+
+    createSimulator(/*wheel_acceleration_limits=*/true);
+    const double diagonal_speed = reachedSpeed(diagonal, AngularVelocity::zero());
+
+    EXPECT_LT(diagonal_speed, straight_speed);
 }
